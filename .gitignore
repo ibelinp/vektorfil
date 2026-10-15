@@ -1,0 +1,43 @@
+# --- Never commit: third-party reference material and tools ---------------------------
+# (S/FILSYN downloads and extracted manuals, Ghidra, Java runtime, Inno extractor, ...)
+_ref/
+
+# --- Local environment -----------------------------------------------------------------
+.venv/
+venv/
+env/
+
+# --- Generated files -------------------------------------------------------------------
+vektorfil.log
+*.log
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+*.spec
+# compiled builds (Nuitka / PyInstaller)
+*.build/
+*.dist/
+*.onefile-build/
+
+# example output
+examples/*.png
+
+# --- Exports a user may save into the project folder -----------------------------------
+*.s2p
+*.s3p
+*.cir
+
+# --- Editors / OS ----------------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini

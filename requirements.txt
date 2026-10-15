@@ -1,0 +1,7 @@
+numpy
+scipy
+mpmath
+matplotlib
+PySide6
+pyqtgraph
+pytest

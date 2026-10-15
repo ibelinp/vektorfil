@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VektorFIL User Guide</title>
+<meta name="description" content="How to design lumped L-C filters and diplexers with VektorFIL, with the theory behind each step.">
+<meta name="author" content="Pieter Ibelings">
+<style>
+:root {
+  --bg: #fbfbfa; --panel: #f2f2ef; --text: #1d1d1b; --muted: #5d5d58; --rule: #dcdcd6;
+  --accent: #1f45b5; --accent-soft: #e6ecfb; --code: #f0efea; --warn: #8a5a00; --warn-bg: #fff5df;
+  --note-bg: #eef5ee; --note: #22602d;
+  --mono: "Cascadia Code", Consolas, "SFMono-Regular", Menlo, monospace;
+  --sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --serif: Georgia, "Times New Roman", serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17181a; --panel: #1f2023; --text: #e6e6e2; --muted: #a2a29b; --rule: #34353a;
+    --accent: #8fb3ff; --accent-soft: #1d2740; --code: #232428; --warn: #f0c060; --warn-bg: #2e2716;
+    --note-bg: #17271a; --note: #8fd39b;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #17181a; --panel: #1f2023; --text: #e6e6e2; --muted: #a2a29b; --rule: #34353a;
+  --accent: #8fb3ff; --accent-soft: #1d2740; --code: #232428; --warn: #f0c060; --warn-bg: #2e2716;
+  --note-bg: #17271a; --note: #8fd39b;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.65 var(--sans); }
+a { color: var(--accent); }
+.layout { display: grid; grid-template-columns: 270px minmax(0, 1fr); max-width: 1320px; margin: 0 auto; }
+nav.toc { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 28px 18px 40px 24px;
+  border-right: 1px solid var(--rule); font-size: 14px; }
+nav.toc .brand { font-weight: 700; font-size: 19px; letter-spacing: .2px; margin-bottom: 2px; }
+nav.toc .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+nav.toc ol { list-style: none; padding: 0; margin: 0; counter-reset: s; }
+nav.toc li { margin: 2px 0; }
+nav.toc a { color: var(--text); text-decoration: none; display: block; padding: 3px 8px; border-radius: 6px; }
+nav.toc a:hover { background: var(--accent-soft); color: var(--accent); }
+nav.toc .grp { margin: 14px 0 4px 8px; color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; }
+main { padding: 36px 48px 80px; max-width: 980px; }
+h1 { font-size: 34px; line-height: 1.2; margin: 0 0 8px; }
+.lede { color: var(--muted); font-size: 18px; margin: 0 0 28px; max-width: 760px; }
+.byline { color: var(--muted); font-size: 15px; margin: -2px 0 14px; }
+.byline b { color: var(--text); }
+h2 { font-size: 25px; margin: 56px 0 10px; padding-top: 10px; border-top: 1px solid var(--rule); }
+h3 { font-size: 19px; margin: 30px 0 6px; }
+h4 { font-size: 16px; margin: 20px 0 4px; }
+p, li { max-width: 800px; }
+code, kbd { font-family: var(--mono); font-size: .9em; background: var(--code); padding: 1px 5px; border-radius: 4px; }
+kbd { border: 1px solid var(--rule); border-bottom-width: 2px; }
+pre { font-family: var(--mono); font-size: 14px; background: var(--code); padding: 12px 14px; border-radius: 8px; overflow-x: auto; }
+figure { margin: 18px 0 26px; }
+figure img { width: 100%; height: auto; border: 1px solid var(--rule); border-radius: 8px; display: block; background: #fff; }
+figure.narrow img { width: auto; max-width: 100%; }
+figcaption { color: var(--muted); font-size: 14px; margin-top: 6px; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0 20px; font-size: 15px; }
+th, td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--rule); }
+th { background: var(--panel); font-weight: 600; }
+.tablewrap { overflow-x: auto; }
+.eq { font-family: var(--serif); font-size: 17px; background: var(--panel); border-left: 3px solid var(--accent);
+  padding: 9px 14px; margin: 12px 0; border-radius: 0 6px 6px 0; overflow-x: auto; }
+.eq i { font-style: italic; }
+.note, .warn { padding: 10px 14px; border-radius: 8px; margin: 14px 0; max-width: 820px; }
+.note { background: var(--note-bg); border-left: 3px solid var(--note); }
+.warn { background: var(--warn-bg); border-left: 3px solid var(--warn); }
+.note b, .warn b { display: inline; }
+.steps { counter-reset: step; list-style: none; padding-left: 0; }
+.steps > li { counter-increment: step; position: relative; padding-left: 40px; margin: 10px 0; }
+.steps > li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 26px; height: 26px;
+  border-radius: 50%; background: var(--accent); color: var(--bg); font-weight: 700; font-size: 14px;
+  display: flex; align-items: center; justify-content: center; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 10px 0 18px; }
+.kv dt { font-weight: 600; }
+.kv dd { margin: 0; }
+.theme-btn { margin-top: 18px; font: inherit; font-size: 13px; color: var(--text); background: var(--panel);
+  border: 1px solid var(--rule); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+footer { margin-top: 70px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--rule); padding-top: 16px; }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  nav.toc { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--rule); padding: 18px 16px; }
+  main { padding: 24px 16px 60px; }
+  h1 { font-size: 28px; }
+  .kv { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="toc" aria-label="Contents">
+  <div class="brand">VektorFIL</div>
+  <div class="sub">User guide &amp; theory</div>
+  <ol>
+    <li class="grp">Getting started</li>
+    <li><a href="#intro">What VektorFIL is</a></li>
+    <li><a href="#install">Installing and running</a></li>
+    <li><a href="#quickstart">A first filter in one minute</a></li>
+    <li><a href="#tour">The main window</a></li>
+    <li><a href="#inputs">Typing values</a></li>
+    <li class="grp">Designing filters</li>
+    <li><a href="#types">Responses and approximations</a></li>
+    <li><a href="#settings">The specification</a></li>
+    <li><a href="#lowpass">Lowpass and highpass</a></li>
+    <li><a href="#bandpass">Bandpass circuits</a></li>
+    <li><a href="#coupled">Coupled-resonator bandpass</a></li>
+    <li><a href="#tem">Coaxial resonators</a></li>
+    <li><a href="#symmetric">Quasi-symmetric bandpass</a></li>
+    <li><a href="#zigzag">Zig-zag elliptic bandpass</a></li>
+    <li><a href="#bandstop">Bandstop</a></li>
+    <li><a href="#single">Singly terminated filters</a></li>
+    <li><a href="#diplexer">The diplexer tool</a></li>
+    <li class="grp">Building it</li>
+    <li><a href="#q">Component Q</a></li>
+    <li><a href="#stdvalues">Standard component values</a></li>
+    <li><a href="#export">Exporting: S2P, S3P, SPICE</a></li>
+    <li><a href="#limits">Limits and messages</a></li>
+    <li class="grp">Theory</li>
+    <li><a href="#th-functions">Transfer functions</a></li>
+    <li><a href="#th-approx">Approximation</a></li>
+    <li><a href="#th-placer">Placing transmission zeros</a></li>
+    <li><a href="#th-synthesis">Ladder synthesis</a></li>
+    <li><a href="#th-band">From lowpass to bandpass</a></li>
+    <li><a href="#th-coupled">Coupled resonators</a></li>
+    <li><a href="#th-precision">Numerical precision</a></li>
+    <li class="grp">Reference</li>
+    <li><a href="#glossary">Glossary</a></li>
+    <li><a href="#refs">References</a></li>
+    <li><a href="#author">About the author</a></li>
+  </ol>
+  <button class="theme-btn" id="themeBtn" type="button">Toggle dark / light</button>
+</nav>
+
+<main>
+<h1>VektorFIL user guide</h1>
+<p class="byline">by <b>Pieter Ibelings</b> · <a href="#author">about the author</a></p>
+<p class="lede">Design lumped L-C filters and diplexers by typing a specification and watching the schematic and
+response update as you type, backed by real network synthesis rather than tables. This guide explains every
+control and gives just enough theory to understand what the program does and why.</p>
+
+<!-- ================================================================== -->
+<h2 id="intro">What VektorFIL is</h2>
+<p>VektorFIL is an educational RF design tool. Its filter designer follows the long tradition of interactive
+L-C filter programs: choose a response (lowpass, highpass, bandpass, bandstop), an approximation (Butterworth,
+Chebyshev, Bessel, elliptic) and a circuit, enter frequencies and impedances, and the finished schematic with
+element values appears immediately, together with its simulated response.</p>
+<p>Underneath sits a <em>synthesis engine</em>. Instead of looking element values up in printed tables, it
+computes the filter's transfer function for exactly your specification and then extracts the circuit from it,
+element by element, at 50 or more significant digits. The method is the one described by
+G.&nbsp;Szentirmai for his S/FILSYN program, whose manuals are now in the public domain, and in the classic
+filter-synthesis literature (see <a href="#refs">References</a>). Consequences you will notice:</p>
+<ul>
+  <li>any ripple, any cutoff attenuation and any order up to 25 work, not just tabulated ones;</li>
+  <li>elliptic filters of even order are available with equal terminations;</li>
+  <li>band edges come out exactly where you ask, including for narrow-band coupled-resonator filters, whose
+      classic formulas are only approximate;</li>
+  <li>several circuits that tables never covered: the minimum-inductor ("zig-zag") elliptic bandpass,
+      quasi-symmetric bandpass filters, singly terminated filters and diplexers.</li>
+</ul>
+<p>Every design is verified by simulating the finished circuit against the transfer function it was built from.</p>
+
+<!-- ================================================================== -->
+<h2 id="install">Installing and running</h2>
+<h3>Windows: the installer</h3>
+<p>Download <code>VektorFIL-&lt;version&gt;-setup.exe</code> from the <b>Releases</b> section of the
+<a href="https://github.com/ibelinp/vektorfil/releases">GitHub page</a> and run it. No administrator rights are
+needed (it installs for the current user unless you choose otherwise), and Python is not required. The installer
+adds VektorFIL and this user guide to the Start menu. A portable zip of the same program is offered as well: unzip
+it anywhere and run <code>VektorFIL.exe</code>.</p>
+<p>Windows may show a SmartScreen warning for a new, unsigned program; choose <b>More info → Run anyway</b>.</p>
+<h3>From source (any platform)</h3>
+<p>VektorFIL is written in Python and needs Python 3.10 or newer.</p>
+<pre>python -m venv .venv
+.venv/Scripts/python -m pip install -r requirements.txt      # Windows
+# .venv/bin/python -m pip install -r requirements.txt        # Linux / macOS
+.venv/Scripts/python -m vektorfil</pre>
+<p>On Windows you can also double-click <code>VektorFIL Filter.bat</code> in the project folder. The diplexer tool
+opens from <b>Tools → Diplexer…</b>, or on its own with
+<code>python -m vektorfil.gui.diplexer_window</code>.</p>
+<p>The program depends on <code>numpy</code>, <code>scipy</code>, <code>mpmath</code> (high-precision arithmetic),
+<code>PySide6</code> (the Qt user interface) and <code>pyqtgraph</code> (plots). The regression tests run with
+<code>python -m pytest tests</code>; <code>python -m vektorfil --selftest</code> runs a quick check without a window.</p>
+<h3>The Help menu</h3>
+<p><b>Help</b> opens this guide (<kbd>F1</kbd>), the GitHub page, the folder with the error log, the licence texts
+and the About box with the version number.</p>
+<div class="note"><b>If something goes wrong:</b> unexpected errors are shown in the status bar and written to
+<code>vektorfil.log</code> in your application-data folder
+(<code>%LOCALAPPDATA%\VektorFIL</code> on Windows; <b>Help → Show log folder</b> opens it). The program keeps
+running.</div>
+
+<!-- ================================================================== -->
+<h2 id="quickstart">A first filter in one minute</h2>
+<ol class="steps">
+  <li>Start the program. A 5th-order Chebyshev lowpass at 100&nbsp;MHz is already designed.</li>
+  <li>Under <b>① Response</b> click <b>Lowpass</b>; under <b>② Approximation</b> choose <b>Chebyshev</b>; under
+      <b>③ Circuit</b> choose <b>Series element first</b>.</li>
+  <li>Under <b>④ Specification</b> type <code>70</code> for the cutoff frequency, set the order to <code>7</code> and
+      the passband ripple to <code>0.25</code>.</li>
+  <li>The plots and the schematic update while you type. The summary at the bottom of the left panel shows the
+      output resistance and the 3&nbsp;dB frequency.</li>
+  <li>Hover over the response to read S21 and S11; open <b>Element values</b> for a copyable list, or use
+      <b>File → Export</b> for an S2P file or a SPICE netlist.</li>
+</ol>
+<figure><img src="img/main_window.png" alt="Main window with a 7th-order Chebyshev lowpass at 70 MHz">
+<figcaption>The main window: the specification in five steps on the left, the response above the schematic on the
+right.</figcaption></figure>
+
+<!-- ================================================================== -->
+<h2 id="tour">The main window</h2>
+<h3>Left: the specification, step by step</h3>
+<dl class="kv">
+  <dt>① Response</dt><dd>Lowpass, highpass, bandpass or bandstop.</dd>
+  <dt>② Approximation</dt><dd>Butterworth, Chebyshev, Bessel or elliptic, optionally <b>singly terminated</b>. For
+    even-order elliptic filters also <b>type C</b> (equal terminations) or <b>type B</b> (unequal).</dd>
+  <dt>③ Circuit</dt><dd>How the filter is built: the list offers the circuits that exist for the chosen response and
+    approximation.</dd>
+  <dt>④ Specification</dt><dd>Impedance, frequencies, order (with a live estimate of the order you need), ripple,
+    edge attenuation, the elliptic stopband, and the resonator settings of coupled filters. Details in
+    <a href="#settings">The specification</a>.</dd>
+  <dt>⑤ Components</dt><dd>Standard component values and the component Q used in the simulation.</dd>
+</dl>
+<p>Below the five steps a summary describes the result: output resistance, band edges, stopband, resonator
+range, and any warnings.</p>
+<h3>Right: the result</h3>
+<dl class="kv">
+  <dt>Response</dt><dd>S21 (transmission) and S11 (reflection) in dB. Hover for a readout. When standard
+    values are used, the ideal response is shown dashed for comparison. <b>View → Plot range</b> sets the frequency
+    range (automatic by default) and the number of points.</dd>
+  <dt>Group delay</dt><dd>Group delay in ns.</dd>
+  <dt>Element values</dt><dd>A text list using the same designators as the schematic, including resonance
+    frequencies of resonators.</dd>
+  <dt>Schematic</dt><dd>Below the plots. Every element carries a designator (L1, L2 … C1, C2 …, TL1 … for
+    transmission lines) and its value. Series elements are labelled above, shunt elements to the right. Ports are
+    marked (1) and (2) with their terminations. Long filters scroll sideways instead of shrinking.</dd>
+</dl>
+<p>The status bar shows how long the design took and any problems. Designs are computed in the background,
+one at a time; the window never freezes.</p>
+
+<!-- ================================================================== -->
+<h2 id="inputs">Typing values</h2>
+<ul>
+  <li><b>Units.</b> A bare number is in the unit shown in the field label (MHz, Ω, nH, pF …).</li>
+  <li><b>Engineering suffixes</b> work everywhere: <code>70M</code>, <code>1.5G</code>, <code>2.2k</code>,
+      <code>27n</code>, <code>4.7p</code>, or plain <code>1e8</code>.</li>
+  <li><b>Arrows.</b> Frequencies and bandwidth step 1&nbsp;% per click, resonator values 2&nbsp;%, ripple
+      0.01&nbsp;dB and Amin 1&nbsp;dB. <kbd>Ctrl</kbd>+click or <kbd>PgUp</kbd>/<kbd>PgDn</kbd> takes ten steps.
+      Arrows stop at the ends of a value's usable range.</li>
+  <li><b>Live update.</b> Every change triggers a new design about a tenth of a second later. Most designs
+      take 20–100&nbsp;ms; high-order elliptic and Bessel designs can take a few seconds (the status bar says
+      "Computing…").</li>
+  <li><b>Empty means automatic.</b> Fields such as "Edge attenuation" or "Resonator L" show their default
+      in grey; leave them empty to use it.</li>
+</ul>
+
+<!-- ================================================================== -->
+<h2 id="types">Responses and approximations</h2>
+<div class="tablewrap"><table>
+<tr><th>Approximation</th><th>Passband</th><th>Stopband</th><th>Use it when</th></tr>
+<tr><td>Butterworth</td><td>maximally flat, 3&nbsp;dB at the cutoff</td><td>monotonic, 6·N&nbsp;dB/octave</td>
+    <td>a smooth, simple response is enough; the best match and delay at low frequencies</td></tr>
+<tr><td>Chebyshev</td><td>equal ripple</td><td>monotonic, steeper than Butterworth</td>
+    <td>you can accept passband ripple (and the matching return-loss ripple) for better selectivity</td></tr>
+<tr><td>Bessel</td><td>maximally flat <em>delay</em></td><td>slow roll-off</td>
+    <td>pulse and time-domain fidelity matter more than selectivity (orders up to 15)</td></tr>
+<tr><td>Elliptic (Cauer-Chebyshev)</td><td>equal ripple</td><td>equal minima, transmission zeros</td>
+    <td>you need the steepest transition for a given number of inductors</td></tr>
+<tr><td>Butterworth / Chebyshev / Elliptic, <em>singly terminated</em></td><td>as above</td><td>as above</td>
+    <td>one end must face an open or a short, e.g. the channels of a <a href="#diplexer">diplexer</a></td></tr>
+</table></div>
+<h3>Choosing between all-pole and elliptic</h3>
+<p>An <em>all-pole</em> filter (Butterworth, Chebyshev, Bessel) has all its transmission zeros at DC or infinity:
+attenuation keeps rising away from the passband. An <em>elliptic</em> filter places some zeros at finite
+frequencies, so the attenuation dips back up to a guaranteed minimum (Amin) between notches. For the same number
+of inductors the elliptic filter is much more selective; for the same number of <em>components</em> the
+all-pole filter often wins, and it reaches deeper ultimate attenuation. Elliptic filters are also more sensitive
+to component tolerance.</p>
+<h3>Even-order elliptic: type B and type C</h3>
+<p>A classical elliptic function of even order has no zero at infinity and cannot be built as an L-C ladder.
+VektorFIL moves two zeros to infinity (<b>type B</b>, slightly unequal terminations) and then, by a frequency
+transformation that puts a reflection zero at DC, makes the terminations equal (<b>type C</b>, the default). Both
+are computed as exact equal-minima designs against your stopband edge.</p>
+<h3>How high an order?</h3>
+<p>Next to the order, <b>Order needed</b> takes an attenuation and the frequency where you need it, and shows at
+once the lowest order of each approximation that gets there, for the current response, cutoff and ripple. In the
+<a href="#quickstart">example</a> above, 50&nbsp;dB at 150&nbsp;MHz for a 70&nbsp;MHz, 0.25&nbsp;dB lowpass needs order 8
+(Butterworth), 6 (Chebyshev) or 5 (elliptic); a Bessel filter cannot reach it ("—").</p>
+
+<!-- ================================================================== -->
+<h2 id="settings">The specification</h2>
+<dl class="kv">
+  <dt>Impedance R</dt><dd>The termination impedance (both ends, unless the circuit makes them unequal, which the
+    summary reports as "Output R").</dd>
+  <dt>Cutoff / Center frequency</dt><dd>Lowpass and highpass: the cutoff. Bandpass and bandstop: the centre
+    frequency. For most bandpass circuits this is the <em>geometric</em> centre √(f<sub>lo</sub>·f<sub>hi</sub>); the
+    quasi-symmetric circuit uses the arithmetic centre.</dd>
+  <dt>Bandwidth</dt><dd>Bandpass and bandstop: the width between the two cutoff points.</dd>
+  <dt>Order</dt><dd>The number of reactive branches of the lowpass prototype (N). A bandpass of order N has N
+    resonators.</dd>
+  <dt>Passband ripple</dt><dd>Chebyshev and elliptic only. 0.1&nbsp;dB ripple corresponds to about
+    16.4&nbsp;dB return loss; 0.01&nbsp;dB to 26.4&nbsp;dB.</dd>
+  <dt>Edge attenuation</dt><dd>The attenuation at the cutoff (or band edges), i.e. where the cutoff is defined. Default: 3.01&nbsp;dB for Butterworth and
+    Bessel, the ripple for Chebyshev. You may define the cutoff at any other attenuation (for a Chebyshev, any
+    value of at least the ripple); the filter is scaled so that the cutoff frequency has exactly that loss.</dd>
+  <dt>Stopband set by</dt><dd>Elliptic only. <b>Minimum attenuation</b> (Amin): the stopband edge follows.
+    <b>Stopband frequency</b> (Fs): Amin follows. The summary reports both, and the transmission zeros.</dd>
+  <dt>Resonator L / C / line Z0</dt><dd>Coupled-resonator bandpass circuits only; see
+    <a href="#coupled">Coupled-resonator bandpass</a>.</dd>
+  <dt>Exact band edges</dt><dd>Coupled circuits only; see below.</dd>
+</dl>
+<p>Under <b>⑤ Components</b>, <b>Values</b> chooses ideal values or 5&nbsp;% (E24), 2&nbsp;% (E48), 1&nbsp;% (E96)
+standard values (see <a href="#stdvalues">Standard component values</a>), and <b>Inductor Q</b> and <b>Capacitor Q</b>
+add losses (see <a href="#q">Component Q</a>).</p>
+<figure><img src="img/lowpass_elliptic.png" alt="Elliptic lowpass, order 7"><figcaption>A 7th-order elliptic
+lowpass with Amin&nbsp;=&nbsp;60&nbsp;dB: three parallel resonators (traps) in the series arms create the notches;
+the summary lists the stopband edge and the zero frequencies.</figcaption></figure>
+
+<!-- ================================================================== -->
+<h2 id="lowpass">Lowpass and highpass</h2>
+<p>Two circuits are offered, named after the element at the input:</p>
+<ul>
+  <li><b>Shunt element first</b>: a lowpass starts with a capacitor to ground. For odd orders it uses one inductor
+      fewer than the alternative, usually the first choice since inductors are larger, costlier and lossier.</li>
+  <li><b>Series element first</b>: a lowpass starts with a series inductor. Use it when a series element at the
+      input suits the circuit around the filter (e.g. a diplexer).</li>
+</ul>
+<p>For elliptic lowpass filters, shunt element first puts the resonators as parallel L-C tanks in the series arms;
+series element first puts them as series L-C traps to ground. A highpass is the lowpass with every L and C exchanged
+(L′&nbsp;=&nbsp;1/(ω<sub>c</sub><sup>2</sup>C), C′&nbsp;=&nbsp;1/(ω<sub>c</sub><sup>2</sup>L)), so for a highpass it is
+<em>series</em> element first that saves inductors. The Element values tab shows the count either way.</p>
+
+<!-- ================================================================== -->
+<h2 id="bandpass">Bandpass circuits</h2>
+<div class="tablewrap"><table>
+<tr><th>Circuit</th><th>Structure</th><th>Good for</th></tr>
+<tr><td>Shunt / series element first</td><td>full transform: every series L becomes a series L-C, every shunt C a shunt L‖C
+    (elliptic: each trap becomes a pair of traps)</td><td>wide bandwidths (&gt;&nbsp;30&nbsp;%); exact for any width</td></tr>
+<tr><td>Shunt resonators, capacitive coupling</td><td>shunt parallel resonators with equal L, coupled by series capacitors</td><td rowspan="3">narrow
+    bandwidths (&lt;&nbsp;20–30&nbsp;%); equal inductors or capacitors; practical values</td></tr>
+<tr><td>Shunt resonators, inductive coupling</td><td>shunt parallel resonators with equal C, coupled by series inductors</td></tr>
+<tr><td>Series resonators, shunt-C coupling</td><td>series resonators with equal L, coupled by shunt capacitors</td></tr>
+<tr><td>Tubular</td><td>series inductors joined by capacitor pi-networks, a capacitor to ground at each end and every
+    junction</td><td>the classic coaxial "tubular" construction</td></tr>
+<tr><td>Tumbular</td><td>the tubular with every L and C swapped: series capacitors joined by inductor pi-networks,
+    an inductor to ground at each end and every junction</td><td>same passband as the tubular, steeper lower skirt
+    (a more highpass-like response)</td></tr>
+<tr><td>Coaxial resonators, capacitive coupling</td><td>as the capacitive-coupled filter, with shorted transmission-line resonators plus loading capacitors</td><td>ceramic
+    coaxial resonator filters</td></tr>
+<tr><td>Quasi-symmetric (Carassa)</td><td>series resonators and shunt inverter capacitors</td><td>10–50&nbsp;% bandwidth with
+    symmetric skirts</td></tr>
+<tr><td>Zig-zag, fewest inductors (Saal–Ulbrich)</td><td>elliptic, minimum number of inductors</td><td>selective elliptic bandpass with fewest
+    inductors (even orders)</td></tr>
+</table></div>
+<p><b>Why not always the full transform?</b> At narrow bandwidths its element values spread enormously: series
+inductors become huge, shunt inductors tiny, and their parasitics dominate. Coupled-resonator filters keep all
+resonators alike and absorb the impedance transformation into the coupling elements.</p>
+
+<!-- ================================================================== -->
+<h2 id="coupled">Coupled-resonator bandpass</h2>
+<figure><img src="img/bandpass_capacitive.png" alt="Capacitive-coupled bandpass"><figcaption>A 5th-order 0.1&nbsp;dB Chebyshev
+bandpass with shunt resonators and capacitive coupling, 100&nbsp;MHz / 5&nbsp;MHz: five equal inductors, coupling
+capacitors between them.</figcaption></figure>
+<h3>The resonator value and its usable range</h3>
+<p>All resonators share one value: the inductor (capacitive coupling, shunt-C coupling, tubular), the capacitor
+(inductive coupling, tumbular) or the line impedance (coaxial resonators). It is a free choice within a <em>usable
+range</em>, which the summary shows:</p>
+<ul>
+  <li>at one end of the range an end coupling element shrinks to nothing (an end coupling capacitor of a
+      capacitive-coupled filter becomes infinite and can simply be left out: a popular trick to save two parts);</li>
+  <li>at the other end a resonator element would turn negative.</li>
+</ul>
+<p>Leave the field empty for an automatic value, type one, or step through the range with the arrows. Values
+outside the range are pulled to the nearest end (with a note in the summary).</p>
+<h3>Exact band edges</h3>
+<p>Coupled-resonator formulas are narrow-band approximations: built straight from them, the band comes out
+slightly narrow and off-centre (a few tenths of a percent at 5&nbsp;% bandwidth, more at wider bandwidths). With
+<b>Exact band edges</b> checked (the default) VektorFIL simulates the filter, measures the edges and re-tunes until
+they sit exactly on the specification. Unchecked, you get the plain formulas: then the edges move when you change the
+resonator value, and the summary shows the actual edges in red.</p>
+<p>With exact edges, the resonator value changes only the balance of the two skirts. At narrow bandwidths that
+effect is small (the asymmetry comes mostly from the circuit itself); at wider bandwidths it grows.</p>
+<h3>Tubular</h3>
+<figure><img src="img/bandpass_tubular.png" alt="Tubular bandpass"><figcaption>A 3rd-order tubular bandpass at
+1&nbsp;GHz: capacitor to ground, inductor, pi-network, inductor, pi-network, inductor, capacitor to ground.</figcaption></figure>
+<p>The tubular filter is derived exactly from the series-resonator, shunt-C coupled filter: each series resonator's capacitor is
+split around its inductor (the end resonators keep their whole capacitor on the inner side) and each resulting
+capacitor tee is converted to the equivalent pi. Its response is identical to that of the shunt-C coupled filter.</p>
+<h3>Tumbular</h3>
+<figure><img src="img/bandpass_tumbular.png" alt="Tumbular bandpass"><figcaption>The same 3rd-order specification as a
+tumbular: inductor to ground, capacitor, inductor pi-network, capacitor, inductor pi-network, capacitor, inductor to
+ground.</figcaption></figure>
+<p>The tumbular is the author's own circuit, which he used for years and designed by hand: a tubular filter in
+which every inductor is a capacitor and every capacitor an inductor. VektorFIL designs the exact tubular for the same
+specification and then swaps each part about the centre frequency f<sub>0</sub>:</p>
+<p class="eq">C′ = 1 / (ω<sub>0</sub>² L) &nbsp;&nbsp;&nbsp; L′ = 1 / (ω<sub>0</sub>² C)</p>
+<p>This maps every frequency f to f<sub>0</sub>²/f. The band edges (geometric about f<sub>0</sub>) map onto each
+other, so the passband, ripple and edges stay exactly the same, while the two skirts trade places: the tubular's
+steep upper skirt becomes a steep lower skirt, giving the tumbular its more highpass-like response. The shared
+resonator value is now the series capacitor.</p>
+<h3>End coils: a wider resonator range</h3>
+<figure><img src="img/bandpass_endcoils.png" alt="Tubular bandpass with end coils"><figcaption>A 5th-order tubular,
+100&nbsp;MHz / 20&nbsp;MHz, with 800&nbsp;nH resonator inductors: past the plain limit, so each port gets a series
+end coil in front of its capacitor to ground.</figcaption></figure>
+<p>Raising the tubular's resonator inductor balances the skirts (the lower skirt gets steeper, the upper one less
+steep), but the plain tubular stops at an upper limit. There the capacitor to ground at each end has shrunk to
+nothing. The end capacitor has to make the termination R look like the larger resistance a larger resonator
+needs, and a capacitor network can only step a resistance <em>down</em>. Past the limit it would need a negative
+capacitor.</p>
+<p>With <b>End coils</b> checked, VektorFIL continues past the limit by putting a series inductor in front of each
+end capacitor. For a required resistance R<sub>e</sub> &gt; R the two end elements are</p>
+<p class="eq">X<sub>L</sub> = √(R (R<sub>e</sub> − R)) &nbsp;&nbsp;&nbsp; B<sub>C</sub> = X<sub>L</sub> / (R R<sub>e</sub>)</p>
+<p>which present exactly R<sub>e</sub> with no reactance left over. At the limit (R<sub>e</sub> = R) the coil is
+zero, so the design carries on smoothly: below the limit the option changes nothing. The range offered goes up to
+ten times the plain limit. For the tumbular the same option adds a series <em>capacitor</em> at each port and
+extends the resonator capacitor downwards.</p>
+<p>Far beyond the limit the narrow-band formulas are stretched and the passband ripple grows. The summary warns
+when the passband loss rises well above the specified value. The band edges stay exact.</p>
+
+<!-- ================================================================== -->
+<h2 id="tem">Coaxial resonators</h2>
+<figure><img src="img/bandpass_coaxial.png" alt="Coaxial resonator bandpass"><figcaption>A 4th-order coaxial-resonator bandpass
+at 900&nbsp;MHz: identical shorted lines (8&nbsp;Ω, 45°) with loading capacitors, coupled by series capacitors.</figcaption></figure>
+<p>The <b>Coaxial resonators, capacitive coupling</b> circuit replaces each L-C resonator with a short-circuited
+TEM transmission line,
+typically a ceramic coaxial resonator, tuned to the centre frequency by a capacitor in parallel. All lines are
+identical; only the loading capacitors differ. You choose:</p>
+<ul>
+  <li><b>Resonator line Z0</b>: the line impedance, with arrows and a usable range like the resonator inductor;</li>
+  <li><b>Line length at f0</b>: the electrical length in degrees at the centre frequency (5–85°). Shorter lines need
+      more loading capacitance and push the line's next resonance (a spurious passband) further up; at 75° a
+      900&nbsp;MHz filter shows a spurious response near 2.7&nbsp;GHz.</li>
+</ul>
+<p>Near f<sub>0</sub> a loaded shorted line behaves like a parallel resonator with susceptance slope</p>
+<div class="eq"><i>b</i> = (cot θ + θ / sin<sup>2</sup>θ) / (2 <i>Z</i><sub>0</sub>), &nbsp;&nbsp;
+ω<sub>0</sub><i>C</i><sub>load</sub> = cot θ / <i>Z</i><sub>0</sub> (+ the coupling corrections)</div>
+<p>so the capacitive-coupling design method applies unchanged. The simulation uses the exact line model, so spurious responses
+are shown faithfully.</p>
+
+<!-- ================================================================== -->
+<h2 id="symmetric">Quasi-symmetric bandpass</h2>
+<figure><img src="img/bandpass_symmetric.png" alt="Quasi-symmetric bandpass"><figcaption>A 3rd-order quasi-symmetric bandpass,
+80–120&nbsp;MHz: series resonators (equal inductors) and two shunt inverter capacitors. The skirts at ±40&nbsp;MHz are
+−11.3 and −13.4&nbsp;dB; a conventional design gives about −20 and −8&nbsp;dB.</figcaption></figure>
+<p>A conventional lowpass-to-bandpass transform keeps <em>geometric</em> symmetry: plotted on a linear frequency
+axis the upper skirt is much weaker than the lower one, increasingly so for wide bandwidths. F.&nbsp;Carassa showed
+that good <em>arithmetic</em> symmetry requires roughly three times as many transmission zeros at infinity as at DC.</p>
+<p>The quasi-symmetric circuit gets closer to that ratio: starting from the conventional (series element first)
+bandpass S P S P …, the first and then every other shunt parallel resonator P is replaced with a series resonator
+between two shunt capacitors acting as impedance inverters. Each inverter capacitor adds a zero at infinity.</p>
+<div class="tablewrap"><table>
+<tr><th>N</th><th>Conventional</th><th>Symmetric</th></tr>
+<tr><td>2</td><td>S P</td><td>S C S</td></tr>
+<tr><td>3</td><td>S P S</td><td>S C S C S</td></tr>
+<tr><td>4</td><td>S P S P</td><td>S C S C S P</td></tr>
+<tr><td>5</td><td>S P S P S</td><td>S C S C S P S</td></tr>
+</table></div>
+<p>No exact equal-ripple realization exists in this circuit, so VektorFIL designs it in two steps: an initial
+design from inverter theory, then a least-squares refinement of the capacitors toward an arithmetically symmetric
+version of the chosen response, with the band edges at f<sub>0</sub>&nbsp;±&nbsp;BW/2. The passband ripple ends up within
+a few hundredths of a dB of the target; the summary reports the skirts one bandwidth away from the centre. The
+method is meant for 10–50&nbsp;% bandwidth.</p>
+
+<!-- ================================================================== -->
+<h2 id="zigzag">Zig-zag elliptic bandpass</h2>
+<figure><img src="img/bandpass_zigzag.png" alt="Zig-zag elliptic bandpass"><figcaption>A 4th-order zig-zag elliptic bandpass: four inductors,
+against five for the full transform, with exactly the same response.</figcaption></figure>
+<p>The minimum-inductor elliptic bandpass of Saal and Ulbrich achieves elliptic selectivity with fewer inductors
+than any other bandpass structure. It cannot be obtained by transforming a lowpass element by element; VektorFIL
+builds it by <em>direct bandpass synthesis</em>: the bandpass transfer function is formed in the bandpass
+frequency domain and a search over extraction sequences finds the realization with the fewest inductors. It
+exists for even orders. This circuit transforms impedance slightly (the summary shows the output resistance,
+e.g. 48.7&nbsp;Ω for 50&nbsp;Ω in).</p>
+
+<!-- ================================================================== -->
+<h2 id="bandstop">Bandstop</h2>
+<p>Bandstop filters use the full transform: series inductors of the lowpass become parallel L-C tanks in the
+series arms, shunt capacitors become series L-C traps to ground. The centre and bandwidth are those of the
+passband edges (the cutoff points around the stopband). Elliptic bandstop filters are supported, with the
+stopband frequency (Fs) being the lower stopband edge.</p>
+
+<!-- ================================================================== -->
+<h2 id="single">Singly terminated filters</h2>
+<figure><img src="img/singly_terminated.png" alt="Singly terminated Chebyshev lowpass"><figcaption>A 5th-order singly terminated
+Chebyshev lowpass: source resistance at port 1, port 2 open.</figcaption></figure>
+<p>A singly terminated filter has its source resistance at one end only; the other end is open (output voltage)
+or shorted (output current). Which one follows from the circuit: an open end faces a shunt capacitor, a shorted
+end a series inductor. Choose Butterworth, Chebyshev or elliptic (with its notches) and tick <b>Singly
+terminated</b>; shunt or series element first then sets the far end.</p>
+<p>Read the plots differently from a doubly terminated filter:</p>
+<ul>
+  <li><b>S21</b> is the voltage transfer into the open end, V<sub>2</sub>/E (or the current into the short); it is
+      1 (0&nbsp;dB) at DC for a lowpass.</li>
+  <li>Even-order Chebyshev filters rise to +ripple dB inside the passband: genuine voltage gain into the open end.</li>
+  <li><b>S11 is 0&nbsp;dB everywhere</b>: a lossless network with an open far end reflects all power. That is why
+      these filters are used in pairs, as a diplexer whose combined input looks resistive.</li>
+</ul>
+<p>The values agree with the classic tables; e.g. a 4th-order Butterworth gives 1.5307, 1.5772, 1.0824, 0.3827
+from the open end.</p>
+
+<!-- ================================================================== -->
+<h2 id="diplexer">The diplexer tool</h2>
+<figure><img src="img/diplexer.png" alt="Diplexer window"><figcaption>Tools → Diplexer: a 5th-order Chebyshev lowpass and highpass
+joined at a common port, crossover 100&nbsp;MHz, worst common-port return loss 28.8&nbsp;dB.</figcaption></figure>
+<h3>Using it</h3>
+<ol class="steps">
+  <li>Set the impedance R0 and the crossover frequency.</li>
+  <li>For each channel choose the approximation (Butterworth, Chebyshev or Elliptic), the order, the ripple (Chebyshev and
+      elliptic) and, for elliptic channels, the stopband attenuation Amin. The summary lists each elliptic
+      channel's notch frequencies.</li>
+  <li>Read the result: both channel schematics drawn from the common port (1) to the lowpass port (2) and the
+      highpass port (3); S11 at the common port, S22 and S33 at the lowpass and highpass ports, S21 and S31 through
+      the channels, S32 isolation between the outputs, and the worst return loss in the passbands.</li>
+  <li>Export a 3-port Touchstone file with <b>Export S3P…</b> (port 1 common, 2 lowpass, 3 highpass).</li>
+</ol>
+<p>Uncheck <b>Common crossover</b> to give each channel its own 3&nbsp;dB frequency (for instance a guard band).</p>
+<p>The approach in this tool is the one its author has used for production diplexers since 1993 (see
+<a href="#author">About the author</a>): two singly terminated channels, joined at a common port through a
+series inductor on the lowpass side and a series capacitor on the highpass side.</p>
+<h3>How it works</h3>
+<p>Each channel is a singly terminated filter, driven from the common port and loaded by R0 at its output. Its
+common-port end is always a <b>series element: a series inductor for the lowpass and a series capacitor for the
+highpass</b>. In the lowpass band the highpass's series capacitor is a high impedance, so it barely loads the
+junction, and vice versa: the L and the C "choose the direction" of the signal.</p>
+<p>A lossless filter that is voltage driven at its input and terminated in R0 has an input conductance that
+follows its own response,</p>
+<div class="eq"><i>G</i>·<i>R</i><sub>0</sub> = |<i>V</i><sub>2</sub> / <i>E</i>|<sup>2</sup></div>
+<p>so in its passband G&nbsp;≈&nbsp;1/R0 and in its stopband G&nbsp;≈&nbsp;0. Paralleling the two channels gives a
+total conductance close to 1/R0 everywhere. If the two responses are <em>complementary</em>,</p>
+<div class="eq">|<i>H</i><sub>LP</sub>|<sup>2</sup> + |<i>H</i><sub>HP</sub>|<sup>2</sup> = 1 &nbsp;at all frequencies,</div>
+<p>the conductances add up to exactly 1/R0 and the susceptances cancel: the common port is perfectly matched.
+Butterworth lowpass and highpass filters of equal order and common 3&nbsp;dB crossover are complementary, so that
+choice gives an <b>exact</b> diplexer (the summary says so; S11 is zero to numerical precision).</p>
+<p>Other pairs are approximately constant-resistance. The important rule is that <b>each channel is 3&nbsp;dB down
+at the crossover</b>, so that both carry half the power there. The tool therefore specifies each channel by its
+3&nbsp;dB frequency. (Placing both ripple edges at the crossover instead would overload the common port with nearly
+twice the conductance and ruin the match.) With this rule a 5th-order 0.1&nbsp;dB Chebyshev pair reaches about
+29&nbsp;dB return loss.</p>
+<p><b>Elliptic channels</b> give much sharper isolation next to the crossover for the same number of inductors: a
+pair of 7th-order channels with Amin&nbsp;=&nbsp;60&nbsp;dB rejects the other band by about 42&nbsp;dB just 20&nbsp;% beyond
+the crossover, with about 29&nbsp;dB return loss at the common port. Each elliptic channel is synthesized directly as a
+singly terminated elliptic filter (its notches placed by zero shifting) and scaled so that its 3&nbsp;dB point is the
+crossover. Even-order elliptic channels take a few seconds to compute.</p>
+<div class="note"><b>Susceptance correctors.</b> Older diplexer methods add a series L-C across the common port to
+cancel leftover susceptance near the crossover. With 3&nbsp;dB-matched channels as designed here, a scan over
+thousands of corrector values found no improvement, so the tool does not add one.</div>
+
+<!-- ================================================================== -->
+<h2 id="q">Component Q</h2>
+<p>Under <b>⑤ Components</b>, <b>Inductor Q</b> and <b>Capacitor Q</b> add losses to the simulation (constant Q over
+frequency: a series resistance ωL/Q for each inductor, a parallel conductance ωC/Q for each capacitor). The design
+itself stays lossless; the response shows the insertion loss and the rounding of the band edges that real parts
+will cause. Leave the fields empty for an ideal (lossless) simulation.</p>
+<p>Rule of thumb: the midband loss grows with the order and falls with Q, and in a bandpass filter it also grows
+in proportion to f<sub>0</sub>/BW. Narrow bandpass filters therefore need high-Q resonators.</p>
+<figure class="narrow"><img src="img/plot_range.png" alt="Plot range dialog"><figcaption>View → Plot range: automatic,
+or a fixed range and number of points (also used by the S2P export).</figcaption></figure>
+
+<!-- ================================================================== -->
+<h2 id="stdvalues">Standard component values</h2>
+<figure><img src="img/standard_values.png" alt="Standard values"><figcaption>A 7th-order elliptic lowpass with 5&nbsp;% (E24) values. The ideal
+response is dashed; the summary reports how far the standard-value design deviates.</figcaption></figure>
+<p>Choose 5&nbsp;% (E24), 2&nbsp;% (E48) or 1&nbsp;% (E96) under <b>⑤ Components → Values</b>. Rounding every element to the
+nearest standard value often spoils the response, especially the passband ripple. VektorFIL instead does what one
+would do by hand, automatically:</p>
+<ol>
+  <li>snap the element that is already closest to a standard value, and keep it fixed;</li>
+  <li>re-tune the remaining free elements so that the response stays as close as possible to the ideal;</li>
+  <li>repeat until every element is standard;</li>
+  <li>finally try each element one standard step up and down and keep any improvement.</li>
+</ol>
+<p>If plain rounding happens to be better, it is used. The summary states the worst passband deviation from the
+ideal and, for elliptic filters, by how much the stopband falls short of Amin. Typical results at 5&nbsp;%: a
+7th-order Chebyshev lowpass within 0.07&nbsp;dB of ideal (plain rounding: 0.5&nbsp;dB).</p>
+<div class="warn"><b>Limitations.</b> Narrow-band coupled filters snap poorly at 5&nbsp;%: their small coupling
+capacitors fall between the standard steps, and matching can take several seconds. Element tolerances of the
+real parts are a separate matter.</div>
+
+<!-- ================================================================== -->
+<h2 id="export">Exporting: S2P, S3P, SPICE</h2>
+<dl class="kv">
+  <dt>S2P</dt><dd><b>File → Export S2P</b> writes a 2-port Touchstone file in dB/angle format over the plot range
+    (<b>View → Plot range</b>), referenced to an impedance it asks for (the filter's own by default). It contains
+    S11, S21, S12 and S22 of the bare filter, including component Q losses. A start frequency of 0 is written as
+    1&nbsp;Hz. With the automatic range on, Start and Stop show the range in use; typing your own turns the
+    automatic range off.</dd>
+  <dt>S3P</dt><dd>The diplexer window exports a 3-port Touchstone file: port 1 common, port 2 lowpass, port 3
+    highpass.</dd>
+  <dt>SPICE</dt><dd><b>File → Export SPICE netlist</b> writes a <code>.cir</code> file with an AC source, the source
+    resistance, all elements named as in the schematic, and the load. Singly terminated outputs are represented by
+    1&nbsp;TΩ (open) or 1&nbsp;µΩ (short).</dd>
+  <dt>Element list</dt><dd><b>File → Copy element values</b> copies the element list to the clipboard.</dd>
+</dl>
+
+<!-- ================================================================== -->
+<h2 id="limits">Limits and messages</h2>
+<dl class="kv">
+  <dt>Order</dt><dd>Up to 25 (Bessel up to 15). High orders take a few seconds.</dd>
+  <dt>"Not realizable at order N"</dt><dd>The specification cannot be built as a ladder: element values would turn
+    negative. Typical cause: a very high-order elliptic filter with a high Amin, whose zeros crowd against the
+    passband edge. Lower the order or the Amin.</dd>
+  <dt>"Unrealistic element values"</dt><dd>Some element's reactance is more than 10,000 times larger or smaller than
+    the termination impedance. The design is mathematically valid but probably impractical.</dd>
+  <dt>"Resonator value limited to the usable range"</dt><dd>A typed resonator value was outside its range and was
+    pulled to the nearest end.</dd>
+  <dt>"Coupled types are accurate below about 30&nbsp;% bandwidth"</dt><dd>Use a shunt- or series-element-first
+    circuit (the full transform) or the quasi-symmetric circuit for wider bands.</dd>
+  <dt>Zig-zag needs an even order</dt><dd>The minimum-inductor elliptic bandpass exists for even orders only.</dd>
+</dl>
+
+<!-- ================================================================== -->
+<h2 id="th-functions">Theory: transfer functions</h2>
+<p>A lossless filter between a source resistance and a load is described by three real polynomials in the complex
+frequency <i>s</i>:</p>
+<div class="eq">S<sub>21</sub>(<i>s</i>) = <i>P</i>(<i>s</i>) / <i>E</i>(<i>s</i>), &nbsp;&nbsp; S<sub>11</sub>(<i>s</i>) = <i>F</i>(<i>s</i>) / <i>E</i>(<i>s</i>)</div>
+<ul>
+  <li>the zeros of <b>P</b> are the <em>transmission zeros</em> (where nothing gets through: at DC, at infinity, or at
+      the notch frequencies of an elliptic filter);</li>
+  <li>the zeros of <b>F</b> are the <em>reflection zeros</em> (perfect match, inside the passband);</li>
+  <li><b>E</b> has all its zeros in the left half plane (it is a Hurwitz polynomial).</li>
+</ul>
+<p>Because the filter is lossless, power is conserved, which gives the Feldtkeller equation</p>
+<div class="eq"><i>E</i>(<i>s</i>)<i>E</i>(−<i>s</i>) = <i>F</i>(<i>s</i>)<i>F</i>(−<i>s</i>) + <i>P</i>(<i>s</i>)<i>P</i>(−<i>s</i>), &nbsp;&nbsp; i.e. |S<sub>11</sub>|<sup>2</sup> + |S<sub>21</sub>|<sup>2</sup> = 1 on the jω axis.</div>
+<p>The ratio <i>K</i> = <i>F</i>/<i>P</i> is the <em>characteristic function</em>; the loss is
+<i>A</i>(ω) = 10&nbsp;log<sub>10</sub>(1 + |<i>K</i>(jω)|<sup>2</sup>)&nbsp;dB. Designing a filter means first choosing
+<i>K</i> (the <a href="#th-approx">approximation</a>), then finding a circuit with that transfer function (the
+<a href="#th-synthesis">synthesis</a>).</p>
+
+<!-- ================================================================== -->
+<h2 id="th-approx">Theory: approximation</h2>
+<p>All approximations are first designed as a normalised lowpass prototype: 1&nbsp;Ω terminations, passband edge at
+1&nbsp;rad/s.</p>
+<dl class="kv">
+  <dt>Butterworth</dt><dd><i>K</i> = ε ω<sup>N</sup>: maximally flat at DC.</dd>
+  <dt>Chebyshev</dt><dd><i>K</i> = ε <i>T</i><sub>N</sub>(ω), with <i>T</i><sub>N</sub> the Chebyshev polynomial and
+    ε<sup>2</sup> = 10<sup>ripple/10</sup> − 1: the error is spread evenly over the passband.</dd>
+  <dt>Bessel</dt><dd><i>E</i>(<i>s</i>) is the reverse Bessel polynomial: maximally flat group delay.</dd>
+  <dt>Elliptic</dt><dd>Equal ripple in the passband and equal minima in the stopband. The zero positions follow from
+    Jacobi elliptic functions; even orders are handled as type B/C (see <a href="#types">above</a>).</dd>
+</dl>
+<p>A single recursion covers every equal-ripple passband with transmission zeros anywhere (R.&nbsp;J.&nbsp;Cameron's
+generalized Chebyshev function): with <i>x<sub>n</sub></i> = (ω − 1/ω<sub>n</sub>)/(1 − ω/ω<sub>n</sub>) for each
+zero ω<sub>n</sub>,</p>
+<div class="eq"><i>C</i><sub>N</sub>(ω) = cosh( Σ<sub>n</sub> arccosh <i>x<sub>n</sub></i> )</div>
+<p>All zeros at infinity give the ordinary Chebyshev filter; the elliptic zero positions give the elliptic filter;
+any other positions give any other equal-ripple filter.</p>
+<p>For bandpass functions with an arbitrary split of zeros between DC and infinity (the
+<a href="#symmetric">symmetric</a> case) VektorFIL works in the variable <i>x</i>&nbsp;=&nbsp;ω<sup>2</sup> and finds the
+reflection-zero polynomial by the Remez exchange algorithm as a weighted best approximation; with equal numbers of
+zeros at DC and infinity it reproduces the ordinary bandpass exactly.</p>
+
+<!-- ================================================================== -->
+<h2 id="th-placer">Theory: placing transmission zeros</h2>
+<p>An elliptic filter is optimal for a single stopband edge with one required attenuation. Real specifications are
+often stepped (e.g. 40&nbsp;dB from 1.25 to 2 times the cutoff, 70&nbsp;dB above). The S/FILSYN program solved this with
+a zero-placement optimiser, and VektorFIL's engine contains the same idea:</p>
+<ul>
+  <li>the <em>margin</em> is the attenuation minus the requirement, evaluated at every local minimum between zeros and
+      at every corner of the requirement;</li>
+  <li>the zeros are moved until the smallest margin is as large as possible; at the optimum the active margins are
+      all equal (a minimax solution, found by an exchange iteration);</li>
+  <li>if the requirement cannot be met, the order is increased.</li>
+</ul>
+<p>For a single edge this reproduces the classical elliptic filter exactly; for stepped requirements it often saves
+one or two orders. (The engine supports this; a user interface for stepped masks is planned.)</p>
+
+<!-- ================================================================== -->
+<h2 id="th-synthesis">Theory: ladder synthesis</h2>
+<p>From <i>E</i> and <i>F</i> the input impedance of the filter, with the far end terminated, is</p>
+<div class="eq"><i>Z</i><sub>in</sub>(<i>s</i>) = (<i>E</i> + <i>F</i>) / (<i>E</i> − <i>F</i>) &nbsp;(normalised to the source resistance)</div>
+<p>The ladder is obtained by taking this impedance apart one transmission zero at a time (Darlington synthesis):</p>
+<dl class="kv">
+  <dt>Zero at infinity</dt><dd>Remove the pole of <i>Z</i> or <i>Y</i> at infinity completely: a series inductor or a
+    shunt capacitor.</dd>
+  <dt>Zero at DC</dt><dd>Remove the pole at DC completely: a series capacitor or a shunt inductor.</dd>
+  <dt>Zero at a finite frequency ω<sub>k</sub></dt><dd><em>Zero shifting</em>: remove only part of a pole at infinity
+    (or DC) so that the remainder vanishes at jω<sub>k</sub>; its inverse then has a pole at jω<sub>k</sub>, which is
+    removed as a resonator (a parallel tank in a series arm, or a series trap to ground).</dd>
+</dl>
+<p>Whatever is left at the end must be a resistor: the load. Different orders of removal give different but
+equivalent circuits; VektorFIL tries them, discards any with negative elements, and keeps the preferred one (fewest
+inductors or capacitors, then the most even values). For singly terminated filters the input immittance is instead
+the ratio of the even and odd parts of <i>E</i>(<i>s</i>), expanded as a continued fraction.</p>
+
+<!-- ================================================================== -->
+<h2 id="th-band">Theory: from lowpass to bandpass</h2>
+<p>The classical transform substitutes</p>
+<div class="eq"><i>p</i> = (<i>s</i><sup>2</sup> + ω<sub>0</sub><sup>2</sup>) / (<i>s</i> <i>B</i>) &nbsp;(bandpass),
+&nbsp;&nbsp; <i>p</i> = <i>s B</i> / (<i>s</i><sup>2</sup> + ω<sub>0</sub><sup>2</sup>) &nbsp;(bandstop)</div>
+<p>into the lowpass prototype. Element by element this turns inductors and capacitors into resonators (the full
+transform); an elliptic prototype's tanks split exactly into pairs of resonators. Applied to the polynomials
+instead, it gives the bandpass transfer function itself, from which <em>direct bandpass synthesis</em> extracts
+ladders the element-wise transform cannot reach, such as the zig-zag filter. The geometric transform makes the band
+symmetric on a logarithmic axis, which is why its skirts look lopsided on a linear one.</p>
+
+<!-- ================================================================== -->
+<h2 id="th-coupled">Theory: coupled resonators</h2>
+<p>A narrow-band bandpass can be described by its resonators and the couplings between them. From the lowpass
+prototype values g<sub>0</sub> … g<sub>N+1</sub> and the fractional bandwidth <i>w</i> = BW/f<sub>0</sub>:</p>
+<div class="eq"><i>Q</i><sub>e1</sub> = g<sub>0</sub>g<sub>1</sub>/<i>w</i>, &nbsp;
+<i>Q</i><sub>eN</sub> = g<sub>N</sub>g<sub>N+1</sub>/<i>w</i>, &nbsp;
+<i>k</i><sub>i,i+1</sub> = <i>w</i> / √(g<sub>i</sub>g<sub>i+1</sub>)</div>
+<p>The external Q values say how strongly the end resonators are loaded by the terminations; the coupling
+coefficients <i>k</i> how strongly neighbouring resonators interact. A coupling element (a series capacitor between
+two parallel resonators, a shunt capacitor between two series resonators) acts as an impedance or admittance
+<em>inverter</em> plus a negative element on each side; the negative elements are absorbed into the neighbouring
+resonators, which is why their tuning capacitors differ although the inductors are equal. The end couplings convert
+the termination to the required loading. These relations hold exactly only at the centre frequency, hence the
+<a href="#coupled">edge correction</a>.</p>
+
+<!-- ================================================================== -->
+<h2 id="th-precision">Theory: numerical precision</h2>
+<p>Synthesis subtracts nearly equal polynomials at every step and loses digits each time. VektorFIL therefore
+computes the approximation and the synthesis at 50 significant digits, more for high orders (60 + 3·N); the original
+S/FILSYN program used 128-bit arithmetic for the same reason. Coefficients below half the working precision are
+treated as rounding residue. Each finished design is checked by simulating the circuit in ordinary double precision
+against the transfer function it came from.</p>
+
+<!-- ================================================================== -->
+<h2 id="glossary">Glossary</h2>
+<dl class="kv">
+  <dt>Amin</dt><dd>Minimum stopband attenuation of an elliptic filter.</dd>
+  <dt>Edge attenuation</dt><dd>Attenuation at the cutoff frequency (often written A<sub>a</sub>), i.e. how the
+    cutoff is defined.</dd>
+  <dt>Designator</dt><dd>Element name in the schematic and lists: L1, C3, TL2.</dd>
+  <dt>E24 / E48 / E96</dt><dd>Standard value series with 24, 48, 96 values per decade (5, 2, 1&nbsp;% tolerance).</dd>
+  <dt>g-values</dt><dd>Element values of the normalised lowpass prototype (1&nbsp;Ω, 1&nbsp;rad/s), used internally.</dd>
+  <dt>Inverter</dt><dd>A network that turns an impedance into its reciprocal (scaled); realised here by a single
+    capacitor with negative neighbours absorbed into the resonators.</dd>
+  <dt>Return loss</dt><dd>−20&nbsp;log|S11|; higher is a better match.</dd>
+  <dt>Singly terminated</dt><dd>A filter with a resistive termination at one end only.</dd>
+  <dt>Transmission zero</dt><dd>A frequency where S21 = 0 (a notch, or DC/infinity).</dd>
+  <dt>Zero shifting</dt><dd>Partial removal of a pole so that the remaining immittance vanishes at a chosen frequency.</dd>
+</dl>
+
+<!-- ================================================================== -->
+<h2 id="refs">References</h2>
+<ul>
+  <li>G. L. Matthaei, L. Young, E. M. T. Jones, <i>Microwave Filters, Impedance-Matching Networks, and Coupling
+      Structures</i>, Artech House, 1980.</li>
+  <li>A. I. Zverev, <i>Handbook of Filter Synthesis</i>, Wiley, 1967.</li>
+  <li>G. Szentirmai, S/FILSYN user manuals and application notes (public domain); in particular the ladder synthesis
+      procedure, the zero-placement optimiser and application note 1, "Diplexer and multiplexer design".</li>
+  <li>R. Saal, E. Ulbrich, "On the design of filters by synthesis", <i>IRE Trans. Circuit Theory</i>, CT-5, 1958.</li>
+  <li>R. J. Cameron, "General coupling matrix synthesis methods for Chebyshev filtering functions", <i>IEEE Trans.
+      MTT</i>, 1999.</li>
+  <li>F. Carassa, "Band-pass filters having quasi-symmetrical attenuation and group-delay characteristics",
+      <i>Alta Frequenza</i>, 1961.</li>
+  <li>S. B. Cohn, "Direct-coupled-resonator filters", <i>Proc. IRE</i>, 1957.</li>
+  <li>H. J. Blinchikoff, A. I. Zverev, <i>Filtering in the Time and Frequency Domains</i>, Wiley, 1976.</li>
+  <li>A. B. Williams, F. J. Taylor, <i>Electronic Filter Design Handbook</i>, McGraw-Hill.</li>
+</ul>
+<p>VektorFIL is written from these published sources; it contains no code or data from other programs. The S/FILSYN
+manuals' worked examples serve as reference results in the regression tests.</p>
+
+<!-- ================================================================== -->
+<h2 id="author">About the author</h2>
+<p><b>Pieter Ibelings</b> designed his first diplexer filter in 1993 on a VAX minicomputer, with plain ASCII
+output. He designed both halves as singly terminated elliptic filters and then combined them into the diplexer,
+the same method this program's <a href="#diplexer">diplexer tool</a> uses. Over the following 30 years his
+diplexer filters were used in cable TV amplifiers and fiber nodes. Every amplifier and fiber node carried between
+two and six of them, built as replaceable plug-in modules that set the frequency split, and the filters were built
+commercially in quantities of tens of millions.</p>
+<p>The early designs used powdered-iron cores; as operating frequencies moved up, the inductors moved to phenolic
+and air cores.</p>
+<p>With the help of Claude, an AI assistant by Anthropic, he created VektorFIL from scratch: a new program written
+from the published filter-synthesis theory listed under <a href="#refs">References</a>, combining true network
+synthesis with a straightforward, interactive way of working. It contains no code or data from any other
+program.</p>
+
+<footer>VektorFIL by Pieter Ibelings. Copyright © 2026 Pieter Ibelings; free software under the GNU General Public License v3. Screenshots are regenerated with <code>python docs/make_screenshots.py</code>.</footer>
+</main>
+</div>
+<script>
+(function () {
+  var btn = document.getElementById('themeBtn');
+  var root = document.documentElement;
+  try { var saved = localStorage.getItem('vektorfil-theme'); if (saved) root.setAttribute('data-theme', saved); } catch (e) {}
+  btn.addEventListener('click', function () {
+    var dark = root.getAttribute('data-theme') === 'dark' ||
+      (!root.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var next = dark ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('vektorfil-theme', next); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>
