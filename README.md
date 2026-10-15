@@ -13,15 +13,37 @@ serve only as reference results to test against.
 
 ## Download
 
-Get the program from the [Releases](https://github.com/ibelinp/vektorfil/releases) page. No
-Python needed.
+Get the program from the [latest release](https://github.com/ibelinp/vektorfil/releases/latest).
+No Python needed. `1.1.0` below stands for the version you download.
 
-* **Windows**: the installer (`-setup.exe`) or the portable zip.
-* **macOS** (Apple silicon): `-macos-arm64.zip`, unzip and move VektorFIL.app to Applications.
-  The app is not notarized: the first time, open it and allow it under System Settings ->
-  Privacy & Security -> Open Anyway.
-* **Linux** (x86-64, Ubuntu 22.04 / Debian 12 / Fedora 36 or newer): `-linux-x86_64.tar.gz`,
-  unpack and run `VektorFIL/VektorFIL`.
+### Windows
+
+Run **VektorFIL-1.1.0-setup.exe** (installs for the current user, no administrator rights
+needed), or unzip **VektorFIL-1.1.0-windows.zip** anywhere and run `VektorFIL.exe`.
+If Windows SmartScreen warns, click **More info -> Run anyway**.
+
+### macOS (Apple silicon: M1 or newer)
+
+1. Download **VektorFIL-1.1.0-macos-arm64.zip** and double-click it to unzip.
+2. Drag **VektorFIL.app** into your **Applications** folder.
+3. Open it. The first time, macOS blocks it because the app is not notarized by Apple
+   (that requires a paid developer account). Click **Done**, then open
+   **System Settings -> Privacy & Security**, scroll down and click **Open Anyway** next to
+   the VektorFIL message, and confirm. From then on it opens normally.
+
+If macOS says the app "is damaged", open Terminal and run
+`xattr -dr com.apple.quarantine /Applications/VektorFIL.app`, then open it again.
+Intel Macs: run from source (below).
+
+### Linux (x86-64: Ubuntu 22.04, Debian 12, Fedora 36 or newer)
+
+```bash
+tar xzf VektorFIL-1.1.0-linux-x86_64.tar.gz
+VektorFIL/VektorFIL
+```
+
+If Qt reports a missing "xcb" plugin, install `libxcb-cursor0` (Ubuntu/Debian) or
+`xcb-util-cursor` (Fedora).
 
 The macOS and Linux builds are made and self-tested by GitHub Actions
 (`.github/workflows/build.yml`, `tools/build_unix.py`); every push also runs the tests on
