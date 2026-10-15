@@ -59,20 +59,36 @@ python -m venv .venv
 .venv/Scripts/python -m vektorfil --selftest            # quick check without a window
 ```
 
-## Building the Windows release
+## Making a release
 
-```bash
-.venv/Scripts/python -m pip install pyinstaller
-.venv/Scripts/python tools/build_windows.py
-```
+1. **Version**: set `__version__` in `vektorfil/__init__.py` (e.g. `1.2.0`), run the tests,
+   commit and push.  Every push runs the tests on Windows, macOS and Linux on GitHub
+   (Actions tab), and builds the macOS and Linux versions as a check.
+2. **Windows build** on a Windows PC:
 
-This packages VektorFIL with PyInstaller (a few minutes), runs the self-test on the result,
-and writes the program folder, a portable zip and an Inno Setup installer to
-`%USERPROFILE%/VektorFIL-build` (kept outside synced folders on purpose; set `VEKTORFIL_BUILD`
-to change it).  The installer needs Inno Setup 6 (`ISCC.exe`), either installed normally or
-placed in `_ref/tools/innosetup`.  `tools/collect_licenses.py` refreshes
-`THIRD_PARTY_LICENSES.txt` and runs as part of the build.  A native-code build with Nuitka is
-available with `--nuitka`.
+   ```bash
+   .venv/Scripts/python -m pip install -r tools/requirements-build.txt
+   .venv/Scripts/python tools/build_windows.py
+   ```
+
+   This packages VektorFIL with PyInstaller (a few minutes), runs the self-test on the result,
+   and writes the program folder, a portable zip and an Inno Setup installer to
+   `%USERPROFILE%/VektorFIL-build` (kept outside synced folders on purpose; set
+   `VEKTORFIL_BUILD` to change it).  The installer needs Inno Setup 6 (`ISCC.exe`), either
+   installed normally or placed in `_ref/tools/innosetup`.  `tools/collect_licenses.py`
+   refreshes `THIRD_PARTY_LICENSES.txt` and runs as part of the build.  A native-code build
+   with Nuitka is available with `--nuitka`.
+3. **Tag**: `git tag v1.2.0` and `git push origin v1.2.0`.
+4. **Release** on GitHub (Releases -> Draft a new release): choose the tag, write the notes,
+   attach the Windows `-setup.exe` and `-windows.zip`, and publish.
+5. **macOS and Linux** files are then built, self-tested and attached to the release by
+   GitHub Actions within about 15 minutes (`.github/workflows/build.yml`, which runs
+   `tools/build_unix.py`).  For a release published before the workflow ran, use
+   Actions -> Build -> Run workflow with the release tag.
+
+`tools/requirements-build.txt` pins the library versions used for the releases, so all three
+systems are built from the same versions.  The macOS app is signed ad hoc only (no paid Apple
+developer account), hence the one-time "Open Anyway" for users.
 
 ## What it does
 
@@ -137,7 +153,10 @@ vektorfil/
 tests/                   pytest regression tests (closed-form values, published
                          S/FILSYN examples, simulated responses)
 examples/                small scripts (plots)
-tools/                   release tooling: build_windows.py, collect_licenses.py, make_icon.py
+tools/                   release tooling: build_windows.py (Windows installer and zip),
+                         build_unix.py (macOS app / Linux archive), requirements-build.txt
+                         (pinned versions), collect_licenses.py, make_icon.py
+.github/workflows/       build.yml: tests on three systems, macOS and Linux release builds
 installer/               Inno Setup script for the Windows installer
 assets/                  program icon
 _ref/                    reference material: S/FILSYN downloads, extracted manual text,
