@@ -37,9 +37,24 @@ EXCLUDE = ["matplotlib", "PIL", "pytest", "IPython", "tkinter", "pandas", "h5py"
            "pyqtgraph.examples", "pyqtgraph.opengl", "OpenGL"]
 
 
+def annotate(title, text):
+    """On GitHub Actions, show text as an error annotation on the run page (readable
+    without logging in); elsewhere just print it."""
+    if os.environ.get("GITHUB_ACTIONS"):
+        tail = "\n".join(text.strip().splitlines()[-40:])
+        print(f"::error title={title}::" + tail.replace("%", "%25").replace("\r", "").replace("\n", "%0A"),
+              flush=True)
+    else:
+        print(title, text, sep="\n")
+
+
 def run(cmd, **kw):
     print("\n>>", " ".join(str(c) for c in cmd), flush=True)
-    subprocess.run([str(c) for c in cmd], check=True, cwd=ROOT, **kw)
+    r = subprocess.run([str(c) for c in cmd], cwd=ROOT, capture_output=True, text=True, **kw)
+    print(r.stdout[-20000:], r.stderr[-20000:], sep="\n", flush=True)
+    if r.returncode != 0:
+        annotate(f"{Path(str(cmd[0])).name} failed ({r.returncode})", r.stderr or r.stdout)
+        raise SystemExit(r.returncode)
 
 
 def pyinstaller():
@@ -99,6 +114,7 @@ def selftest():
     print(text)
     if r.returncode != 0 or "SELFTEST PASSED" not in text:
         print(r.stdout, r.stderr)
+        annotate(f"self-test failed (exit code {r.returncode})", "\n".join((text, r.stdout, r.stderr)))
         raise SystemExit(f"self-test FAILED (exit code {r.returncode})")
 
 
