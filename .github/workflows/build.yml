@@ -2,7 +2,8 @@
 #
 #   push to main      run the tests, build both, keep the files as workflow artifacts
 #   release published build both and attach them to that release
-#   manual run        same as a push (Actions tab -> Build -> Run workflow)
+#   manual run        Actions tab -> Build -> Run workflow; with a release tag (e.g. v1.1.0)
+#                     the files are also attached to that existing release
 #
 # The Windows installer is still built on the author's PC (tools/build_windows.py).
 name: Build
@@ -13,9 +14,18 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Attach the builds to this existing release (e.g. v1.1.0); empty = just build"
+        required: false
+        default: ""
 
 permissions:
   contents: write          # to attach files to a release
+
+env:
+  # no screen on the build machines: Qt (also when PyInstaller imports it) draws off-screen
+  QT_QPA_PLATFORM: offscreen
 
 concurrency:
   group: build-${{ github.ref }}-${{ github.event_name }}
@@ -29,8 +39,6 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, macos-14, windows-latest]
-    env:
-      QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -82,7 +90,8 @@ jobs:
           path: ${{ steps.build.outputs.file }}
           if-no-files-found: error
       - name: Attach to the release
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || inputs.release_tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" "${{ steps.build.outputs.file }}" --clobber
+          TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+        run: gh release upload "$TAG" "${{ steps.build.outputs.file }}" --clobber
