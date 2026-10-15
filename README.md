@@ -53,10 +53,12 @@ available with `--nuitka`.
 Singly terminated filters (source resistance on one side, the other end open or shorted)
 are the building blocks of diplexers and multiplexers.
 
-Options: edge attenuation, elliptic by Amin or Fs, end coils for a wider tubular range,
-component Q, a live order estimate.  Extras: standard component values (E24/E48/E96 with
-automatic snap-and-retune), exact band edges for coupled-resonator filters, SPICE and
-Touchstone (.s2p) export.
+Options: edge attenuation, elliptic by Amin, Fs or a stepped stopband mask, end coils for a
+wider tubular range, component Q, a live order estimate.  Extras: standard component values
+(E24/E48/E96 with automatic snap-and-retune), exact band edges for coupled-resonator
+filters, plot markers, Smith chart, step and impulse response, Monte Carlo tolerance
+analysis, an air-core coil calculator, design files, PDF reports, SPICE and Touchstone
+(.s2p) export.
 
 ## Code map
 
@@ -79,14 +81,25 @@ vektorfil/
     symmetric.py         symmetry-preserving bandpass (inverter design + refinement)
     network.py           Ladder: element list, scaling, ABCD analysis, S-parameters
   filters/               the interactive design layer
-    design.py            FilterSpec -> design() -> DesignResult (ladder + info)
+    design.py            FilterSpec -> design() -> DesignResult (ladder + info); circuit
+                         names; stepped stopband masks; order estimate
     stdvalues.py         E-series values, snapping with re-tuning
     diplexer.py          lowpass/highpass diplexer from singly terminated channels
+    project.py           design files (.vfil, JSON)
+  analysis/              tools that work on a finished design (plain numpy)
+    montecarlo.py        component-tolerance spread of the response
+    timedomain.py        step and impulse response by inverse FFT
+    coil.py              single-layer air-core coils (Wheeler 1982)
   gui/
     filter_window.py     main window (PySide6 / Qt), live recompute in a worker thread,
-                         Help menu, About box, --selftest
+                         markers, design files, menus, About box, --selftest
     diplexer_window.py   diplexer designer (Tools -> Diplexer...)
     schematic.py         schematic drawing with measured, non-overlapping labels
+    smith.py             Smith chart of S11
+    montecarlo_tab.py    the Monte Carlo tab
+    coil_dialog.py       Tools -> Air-core coil
+    report.py            File -> Export report (PDF)
+    plotstyle.py         shared plot colours and styling
   app_paths.py           where logs (AppData) and bundled resources live
 tests/                   pytest regression tests (closed-form values, published
                          S/FILSYN examples, simulated responses)

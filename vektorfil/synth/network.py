@@ -159,7 +159,10 @@ class Ladder:
         """dict with S11/S21 dB, phase (deg) and group delay (s)."""
         f = np.asarray(f, float)
         s11, s21 = self.sparams(f)
-        ph = np.unwrap(np.angle(s21))
+        # at a transmission zero S21 passes through zero and its phase flips by 180 deg;
+        # that flip is not delay, so unwrap with a 180 deg period (the true phase of a
+        # lossless ladder never jumps by 180 deg between neighbouring points otherwise)
+        ph = np.unwrap(np.angle(s21), period=np.pi)
         gd = -np.gradient(ph, 2 * np.pi * f) if len(f) > 1 else np.full(len(f), np.nan)
         return {"f": f, "s11_db": 20 * np.log10(np.abs(s11) + 1e-300),
                 "s21_db": 20 * np.log10(np.abs(s21) + 1e-300),

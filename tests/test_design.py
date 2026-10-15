@@ -313,3 +313,12 @@ def test_old_circuit_names_still_accepted():
                                 subtype=SERIES_FIRST if ftype == "Highpass" else SHUNT_FIRST))
         assert old.ladder.table() == new.ladder.table()
         assert sum(b.L is not None for b in old.ladder.branches) < sum(b.C is not None for b in old.ladder.branches)
+
+
+def test_group_delay_has_no_spikes_at_notches():
+    # the 180 degree phase flip at each transmission zero must not show up as delay
+    r = design(FilterSpec(shape="Elliptic", order=5, fc=100e6))
+    f = np.linspace(1e5, 500e6, 2001)
+    gd = r.ladder.response(f)["gd"]
+    assert gd.min() > 0
+    assert gd.max() < 20e-9

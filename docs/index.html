@@ -61,6 +61,9 @@ table { border-collapse: collapse; width: 100%; margin: 12px 0 20px; font-size: 
 th, td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--rule); }
 th { background: var(--panel); font-weight: 600; }
 .tablewrap { overflow-x: auto; }
+.step { display: inline-block; width: 1.35em; height: 1.35em; line-height: 1.35em; border-radius: 50%;
+        background: var(--accent); color: #fff; text-align: center; font-size: 0.8em; font-weight: 700;
+        margin-right: 0.3em; vertical-align: 0.1em; }
 .eq { font-family: var(--serif); font-size: 17px; background: var(--panel); border-left: 3px solid var(--accent);
   padding: 9px 14px; margin: 12px 0; border-radius: 0 6px 6px 0; overflow-x: auto; }
 .eq i { font-style: italic; }
@@ -103,6 +106,7 @@ footer { margin-top: 70px; color: var(--muted); font-size: 14px; border-top: 1px
     <li class="grp">Designing filters</li>
     <li><a href="#types">Responses and approximations</a></li>
     <li><a href="#settings">The specification</a></li>
+    <li><a href="#mask">Stepped stopband mask</a></li>
     <li><a href="#lowpass">Lowpass and highpass</a></li>
     <li><a href="#bandpass">Bandpass circuits</a></li>
     <li><a href="#coupled">Coupled-resonator bandpass</a></li>
@@ -112,9 +116,13 @@ footer { margin-top: 70px; color: var(--muted); font-size: 14px; border-top: 1px
     <li><a href="#bandstop">Bandstop</a></li>
     <li><a href="#single">Singly terminated filters</a></li>
     <li><a href="#diplexer">The diplexer tool</a></li>
+    <li><a href="#analysis">Markers, Smith chart, time domain</a></li>
     <li class="grp">Building it</li>
     <li><a href="#q">Component Q</a></li>
     <li><a href="#stdvalues">Standard component values</a></li>
+    <li><a href="#montecarlo">Monte Carlo tolerance analysis</a></li>
+    <li><a href="#coil">Air-core coils</a></li>
+    <li><a href="#files">Design files and reports</a></li>
     <li><a href="#export">Exporting: S2P, S3P, SPICE</a></li>
     <li><a href="#limits">Limits and messages</a></li>
     <li class="grp">Theory</li>
@@ -194,9 +202,9 @@ running.</div>
 <h2 id="quickstart">A first filter in one minute</h2>
 <ol class="steps">
   <li>Start the program. A 5th-order Chebyshev lowpass at 100&nbsp;MHz is already designed.</li>
-  <li>Under <b>① Response</b> click <b>Lowpass</b>; under <b>② Approximation</b> choose <b>Chebyshev</b>; under
-      <b>③ Circuit</b> choose <b>Series element first</b>.</li>
-  <li>Under <b>④ Specification</b> type <code>70</code> for the cutoff frequency, set the order to <code>7</code> and
+  <li>Under <b><span class="step">1</span> Response</b> click <b>Lowpass</b>; under <b><span class="step">2</span> Approximation</b> choose <b>Chebyshev</b>; under
+      <b><span class="step">3</span> Circuit</b> choose <b>Series element first</b>.</li>
+  <li>Under <b><span class="step">4</span> Specification</b> type <code>70</code> for the cutoff frequency, set the order to <code>7</code> and
       the passband ripple to <code>0.25</code>.</li>
   <li>The plots and the schematic update while you type. The summary at the bottom of the left panel shows the
       output resistance and the 3&nbsp;dB frequency.</li>
@@ -211,24 +219,33 @@ right.</figcaption></figure>
 <h2 id="tour">The main window</h2>
 <h3>Left: the specification, step by step</h3>
 <dl class="kv">
-  <dt>① Response</dt><dd>Lowpass, highpass, bandpass or bandstop.</dd>
-  <dt>② Approximation</dt><dd>Butterworth, Chebyshev, Bessel or elliptic, optionally <b>singly terminated</b>. For
+  <dt><span class="step">1</span> Response</dt><dd>Lowpass, highpass, bandpass or bandstop.</dd>
+  <dt><span class="step">2</span> Approximation</dt><dd>Butterworth, Chebyshev, Bessel or elliptic, optionally <b>singly terminated</b>. For
     even-order elliptic filters also <b>type C</b> (equal terminations) or <b>type B</b> (unequal).</dd>
-  <dt>③ Circuit</dt><dd>How the filter is built: the list offers the circuits that exist for the chosen response and
+  <dt><span class="step">3</span> Circuit</dt><dd>How the filter is built: the list offers the circuits that exist for the chosen response and
     approximation.</dd>
-  <dt>④ Specification</dt><dd>Impedance, frequencies, order (with a live estimate of the order you need), ripple,
+  <dt><span class="step">4</span> Specification</dt><dd>Impedance, frequencies, order (with a live estimate of the order you need), ripple,
     edge attenuation, the elliptic stopband, and the resonator settings of coupled filters. Details in
     <a href="#settings">The specification</a>.</dd>
-  <dt>⑤ Components</dt><dd>Standard component values and the component Q used in the simulation.</dd>
+  <dt><span class="step">5</span> Components</dt><dd>Standard component values and the component Q used in the simulation.</dd>
 </dl>
 <p>Below the five steps a summary describes the result: output resistance, band edges, stopband, resonator
 range, and any warnings.</p>
+<p>The <b>File</b> menu opens and saves designs and writes reports, pictures, S2P files and SPICE netlists; the
+program also reopens the design you were working on when you last closed it (see
+<a href="#files">Design files and reports</a>). <b>Tools</b> has the diplexer designer and the
+<a href="#coil">air-core coil</a> calculator.</p>
 <h3>Right: the result</h3>
 <dl class="kv">
   <dt>Response</dt><dd>S21 (transmission) and S11 (reflection) in dB. Hover for a readout. When standard
     values are used, the ideal response is shown dashed for comparison. <b>View → Plot range</b> sets the frequency
     range (automatic by default) and the number of points.</dd>
   <dt>Group delay</dt><dd>Group delay in ns.</dd>
+  <dt>Smith chart</dt><dd>S11 on a Smith chart; hover for frequency and input impedance. See
+    <a href="#analysis">Markers, Smith chart, time domain</a>.</dd>
+  <dt>Time domain</dt><dd>Step and impulse response.</dd>
+  <dt>Monte Carlo</dt><dd>The spread of the response with component tolerances; see
+    <a href="#montecarlo">Monte Carlo tolerance analysis</a>.</dd>
   <dt>Element values</dt><dd>A text list using the same designators as the schematic, including resonance
     frequencies of resonators.</dd>
   <dt>Schematic</dt><dd>Below the plots. Every element carries a designator (L1, L2 … C1, C2 …, TL1 … for
@@ -304,17 +321,35 @@ once the lowest order of each approximation that gets there, for the current res
     Bessel, the ripple for Chebyshev. You may define the cutoff at any other attenuation (for a Chebyshev, any
     value of at least the ripple); the filter is scaled so that the cutoff frequency has exactly that loss.</dd>
   <dt>Stopband set by</dt><dd>Elliptic only. <b>Minimum attenuation</b> (Amin): the stopband edge follows.
-    <b>Stopband frequency</b> (Fs): Amin follows. The summary reports both, and the transmission zeros.</dd>
+    <b>Stopband frequency</b> (Fs): Amin follows. <b>Stepped mask</b>: a stopband requirement in steps, see
+    <a href="#mask">Stepped stopband mask</a>. The summary reports the stopband and the transmission zeros.</dd>
   <dt>Resonator L / C / line Z0</dt><dd>Coupled-resonator bandpass circuits only; see
     <a href="#coupled">Coupled-resonator bandpass</a>.</dd>
   <dt>Exact band edges</dt><dd>Coupled circuits only; see below.</dd>
 </dl>
-<p>Under <b>⑤ Components</b>, <b>Values</b> chooses ideal values or 5&nbsp;% (E24), 2&nbsp;% (E48), 1&nbsp;% (E96)
+<p>Under <b><span class="step">5</span> Components</b>, <b>Values</b> chooses ideal values or 5&nbsp;% (E24), 2&nbsp;% (E48), 1&nbsp;% (E96)
 standard values (see <a href="#stdvalues">Standard component values</a>), and <b>Inductor Q</b> and <b>Capacitor Q</b>
 add losses (see <a href="#q">Component Q</a>).</p>
 <figure><img src="img/lowpass_elliptic.png" alt="Elliptic lowpass, order 7"><figcaption>A 7th-order elliptic
 lowpass with Amin&nbsp;=&nbsp;60&nbsp;dB: three parallel resonators (traps) in the series arms create the notches;
 the summary lists the stopband edge and the zero frequencies.</figcaption></figure>
+
+<!-- ================================================================== -->
+<h2 id="mask">Stepped stopband mask</h2>
+<figure><img src="img/mask_markers.png" alt="Elliptic lowpass designed against a stepped mask, with markers">
+<figcaption>An 8th-order elliptic-type lowpass against the mask 40&nbsp;dB from 125 to 200&nbsp;MHz and 60&nbsp;dB above
+(dashed steps). Both steps are met with the same margin, +15.7&nbsp;dB. Three markers show the values at 100, 125 and
+200&nbsp;MHz.</figcaption></figure>
+<p>A classical elliptic filter is optimal for one requirement: a single stopband edge with one attenuation. Real
+specifications often come in steps, for example 40&nbsp;dB just above the passband and 60&nbsp;dB further out. Choose
+<b>Stopband set by → Stepped mask</b> and type the steps as <code>start-stop:dB</code> in MHz, separated by commas:</p>
+<pre>125-200:40, 200-:60</pre>
+<p>An empty stop means "and above". For a highpass write the steps below the cutoff (<code>0-60:60, 60-80:40</code>);
+for a bandpass give steps on either side (<code>0-80:40, 125-:40</code>). VektorFIL keeps the order you set and moves
+the notches until every step has the same, largest possible margin (the zero placement described under
+<a href="#th-placer">Theory: placing transmission zeros</a>). The mask is drawn on the response plot, and the summary
+shows the margin: positive when the mask is met, in red with a warning when it is missed, in which case raise the
+order or relax the mask. The result is still an exact equal-ripple design with an elliptic-style ladder.</p>
 
 <!-- ================================================================== -->
 <h2 id="lowpass">Lowpass and highpass</h2>
@@ -546,8 +581,32 @@ cancel leftover susceptance near the crossover. With 3&nbsp;dB-matched channels 
 thousands of corrector values found no improvement, so the tool does not add one.</div>
 
 <!-- ================================================================== -->
+<h2 id="analysis">Markers, Smith chart, time domain</h2>
+<h3>Reading values</h3>
+<p>Move the mouse over the Response or Group delay plot: a dashed line follows it, a dot marks where it crosses each
+curve, and the values at that frequency appear next to the line. On the Response plot <b>click</b> to place a
+marker (up to six): a numbered triangle on the S21 curve and on the S11 curve, with the frequency, S21 and S11
+listed in a small table in the lower left. Click a marker again to remove it, or use <b>View → Clear markers</b>. Markers stay where
+they are while you change the design, so you can watch a value move; markers that end up outside the plotted
+frequency range are removed.</p>
+<h3>Smith chart</h3>
+<figure><img src="img/smith_chart.png" alt="Smith chart"><figcaption>S11 of a 5th-order capacitively coupled bandpass on
+the Smith chart: the passband is the tight loop around the centre, the stopbands run along the rim.</figcaption></figure>
+<p>The Smith chart tab plots S11 in the reflection-coefficient plane, with circles of constant resistance and arcs
+of constant reactance (normalised to the filter's impedance). Hover to read the frequency, |S11| and the input
+impedance Z&nbsp;=&nbsp;Z<sub>0</sub>(1&nbsp;+&nbsp;Γ)/(1&nbsp;−&nbsp;Γ); the hover position on the Response plot is
+marked on the chart as well.</p>
+<h3>Time domain</h3>
+<figure><img src="img/time_domain.png" alt="Step and impulse response"><figcaption>Step and impulse response of a
+5th-order 0.5&nbsp;dB Chebyshev lowpass at 100&nbsp;MHz: overshoot and ringing that a Bessel filter avoids.</figcaption></figure>
+<p>The Time domain tab shows the step response and the impulse response (scaled to a peak of 1). They are computed
+from the frequency response with an inverse FFT: S21 is sampled from DC to well into the stopband and treated as the
+spectrum of a real, causal signal; the step response is the running integral of the impulse response. Compare a
+Chebyshev with a Bessel filter of the same order to see why Bessel filters are used for pulses.</p>
+
+<!-- ================================================================== -->
 <h2 id="q">Component Q</h2>
-<p>Under <b>⑤ Components</b>, <b>Inductor Q</b> and <b>Capacitor Q</b> add losses to the simulation (constant Q over
+<p>Under <b><span class="step">5</span> Components</b>, <b>Inductor Q</b> and <b>Capacitor Q</b> add losses to the simulation (constant Q over
 frequency: a series resistance ωL/Q for each inductor, a parallel conductance ωC/Q for each capacitor). The design
 itself stays lossless; the response shows the insertion loss and the rounding of the band edges that real parts
 will cause. Leave the fields empty for an ideal (lossless) simulation.</p>
@@ -560,7 +619,7 @@ or a fixed range and number of points (also used by the S2P export).</figcaption
 <h2 id="stdvalues">Standard component values</h2>
 <figure><img src="img/standard_values.png" alt="Standard values"><figcaption>A 7th-order elliptic lowpass with 5&nbsp;% (E24) values. The ideal
 response is dashed; the summary reports how far the standard-value design deviates.</figcaption></figure>
-<p>Choose 5&nbsp;% (E24), 2&nbsp;% (E48) or 1&nbsp;% (E96) under <b>⑤ Components → Values</b>. Rounding every element to the
+<p>Choose 5&nbsp;% (E24), 2&nbsp;% (E48) or 1&nbsp;% (E96) under <b><span class="step">5</span> Components → Values</b>. Rounding every element to the
 nearest standard value often spoils the response, especially the passband ripple. VektorFIL instead does what one
 would do by hand, automatically:</p>
 <ol>
@@ -575,6 +634,54 @@ ideal and, for elliptic filters, by how much the stopband falls short of Amin. T
 <div class="warn"><b>Limitations.</b> Narrow-band coupled filters snap poorly at 5&nbsp;%: their small coupling
 capacitors fall between the standard steps, and matching can take several seconds. Element tolerances of the
 real parts are a separate matter.</div>
+
+<!-- ================================================================== -->
+<h2 id="montecarlo">Monte Carlo tolerance analysis</h2>
+<figure><img src="img/monte_carlo.png" alt="Monte Carlo tab"><figcaption>500 runs of a 7th-order Chebyshev lowpass with
+5&nbsp;% inductors and capacitors: the shaded bands show the lowest and highest S21 and S11 over all runs.</figcaption></figure>
+<p>Real components are not exact. The Monte Carlo tab builds the design many times with every inductor and capacitor
+off by a random amount, and shows how far the response spreads:</p>
+<ul>
+  <li><b>Runs</b>: how many random versions (200 is quick; a few thousand gives smoother bands).</li>
+  <li><b>L ±</b> and <b>C ±</b>: the tolerances in percent.</li>
+  <li><b>Uniform</b>: every value anywhere within the tolerance, equally likely (a pessimistic view).
+      <b>Gaussian</b>: a normal distribution with the tolerance as three standard deviations, closer to how
+      production parts are spread.</li>
+</ul>
+<p>Press <b>Run</b>. The plot shows the nominal S21 and S11 with a band between the lowest and highest value of all
+runs at each frequency, and the line above it the worst passband loss and return loss over all runs. Transmission-line
+resonators keep their line; only their loading capacitor varies. Component Q is included. A new design clears the
+result, since it belongs to the old one.</p>
+<p>Typical lessons: the passband edges move the most; elliptic notches wander and their depth varies a lot; narrow
+bandpass filters need much tighter tolerances than lowpass filters; and a design with 0.1&nbsp;dB ripple can easily
+show 1&nbsp;dB once 5&nbsp;% parts are fitted, which is why filters are tuned in production.</p>
+
+<!-- ================================================================== -->
+<h2 id="coil">Air-core coils</h2>
+<figure class="narrow"><img src="img/coil.png" alt="Air-core coil calculator"><figcaption>Tools → Air-core coil: the
+turns for an inductor of the current design.</figcaption></figure>
+<p><b>Tools → Air-core coil</b> works out a single-layer air-core inductor. Pick an inductor of the current design
+(or type a value), the diameter of the form, the wire gauge (AWG) and the turn spacing (close wound, or a pitch in
+mm). The window shows the number of turns, the inductance with that number rounded to whole turns, the winding
+length and the length of wire.</p>
+<p>The calculation uses Wheeler's 1982 formula for a single-layer solenoid,</p>
+<div class="eq"><i>L</i> = μ<sub>0</sub> <i>N</i><sup>2</sup> <i>a</i> [ ln(1 + π<i>a</i>/<i>b</i>) + 1 / (2.3 + 1.6 <i>b</i>/<i>a</i> + 0.44 (<i>b</i>/<i>a</i>)<sup>2</sup>) ]</div>
+<p>with <i>a</i> the coil radius to the wire centre and <i>b</i> the winding length; it is accurate to about 0.1&nbsp;%
+for the current-sheet model at any length. Leads, the round-wire correction and the coil's self-capacitance are not
+included: wind slightly long and trim by spreading or squeezing the turns.</p>
+
+<!-- ================================================================== -->
+<h2 id="files">Design files and reports</h2>
+<dl class="kv">
+  <dt>Open / Save</dt><dd><b>File → Save design</b> (<kbd>Ctrl</kbd>+<kbd>S</kbd>) writes the whole specification to a
+    <code>.vfil</code> file, together with the order-estimate inputs, the plot range, the markers and the Monte Carlo
+    settings; <b>File → Open design</b> (<kbd>Ctrl</kbd>+<kbd>O</kbd>) reads it back. The file is plain JSON, so it
+    can be read or compared as text. The title bar shows the file name.</dd>
+  <dt>Last design</dt><dd>When you close VektorFIL it remembers the design on screen and opens with it next time.</dd>
+  <dt>Report</dt><dd><b>File → Export report (PDF)</b> writes the summary, the response plot, the schematic and the
+    element list to a PDF, ready to file or send.</dd>
+  <dt>Picture</dt><dd><b>File → Save picture (PNG)</b> saves the plots and the schematic as they are on screen.</dd>
+</dl>
 
 <!-- ================================================================== -->
 <h2 id="export">Exporting: S2P, S3P, SPICE</h2>
@@ -662,7 +769,7 @@ a zero-placement optimiser, and VektorFIL's engine contains the same idea:</p>
   <li>if the requirement cannot be met, the order is increased.</li>
 </ul>
 <p>For a single edge this reproduces the classical elliptic filter exactly; for stepped requirements it often saves
-one or two orders. (The engine supports this; a user interface for stepped masks is planned.)</p>
+one or two orders. It is what <b>Stepped mask</b> uses (see <a href="#mask">Stepped stopband mask</a>).</p>
 
 <!-- ================================================================== -->
 <h2 id="th-synthesis">Theory: ladder synthesis</h2>
@@ -749,6 +856,8 @@ against the transfer function it came from.</p>
   <li>S. B. Cohn, "Direct-coupled-resonator filters", <i>Proc. IRE</i>, 1957.</li>
   <li>H. J. Blinchikoff, A. I. Zverev, <i>Filtering in the Time and Frequency Domains</i>, Wiley, 1976.</li>
   <li>A. B. Williams, F. J. Taylor, <i>Electronic Filter Design Handbook</i>, McGraw-Hill.</li>
+  <li>H. A. Wheeler, "Inductance formulas for circular and square coils", <i>Proc. IEEE</i>, vol. 70, 1982
+      (air-core coils).</li>
 </ul>
 <p>VektorFIL is written from these published sources; it contains no code or data from other programs. The S/FILSYN
 manuals' worked examples serve as reference results in the regression tests.</p>

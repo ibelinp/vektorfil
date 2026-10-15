@@ -340,8 +340,7 @@ def equiripple(w1, w2, ripple_db, n_pairs, n_dc, finite_zeros=(), iters=60):
             A[i, N] = (-1) ** i / weight(c + h * t)
             b[i] = t ** N
         sol = mp.lu_solve(A, b)
-        a = [sol[j] for j in range(N)]
-        Eh = sol[N]
+        a = [sol[j] for j in range(N)]   # sol[N] is the levelled error (not needed)
 
         def err(t):
             return (t ** N - sum(a[j] * t ** j for j in range(N))) * weight(c + h * t)

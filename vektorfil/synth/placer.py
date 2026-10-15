@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 
 import mpmath as mp
 import numpy as np
-from scipy.optimize import fsolve, minimize, minimize_scalar
+from scipy.optimize import fsolve, minimize
 
 from . import approx
 
@@ -369,6 +369,7 @@ def place(order=None, ripple_db=0.1, mask=None, n_inf=1, shape="cheby", zs=None,
     fixed = [float(z) for z in fixed_zeros]
 
     def run(n):
+        """Place the zeros for total degree n; None when n does not fit n_inf/fixed."""
         m2 = n - n_inf - 2 * len(fixed)
         if m2 < 0 or m2 % 2:
             return None

@@ -1,4 +1,3 @@
-import mpmath as mp
 import numpy as np
 import pytest
 
@@ -50,7 +49,6 @@ def test_elliptic_equal_minima_and_realization(n, ws):
 
 def test_elliptic_amin_spec():
     p = elliptic(5, 0.1, amin_db=60)
-    ws = float(p.meta.get("ws", 0)) or None
     assert float(stopband_minima(p, min(p.zeros) * 0.999)[1]) == pytest.approx(60, abs=1e-6)
 
 

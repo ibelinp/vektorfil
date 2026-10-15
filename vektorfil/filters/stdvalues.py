@@ -141,6 +141,7 @@ def snap(ideal, series_name, f, aa_db=0.1, retune=True, stop_db=80.0):
     free = list(range(len(slots)))
 
     def retune_free(vals, free):
+        """Least-squares re-tune of the free (not yet snapped) elements, in log space."""
         if not free:
             return vals
         x0 = np.log(vals[free])

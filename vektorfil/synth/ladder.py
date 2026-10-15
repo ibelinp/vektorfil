@@ -61,7 +61,8 @@ class LadderResult:
 
 
 class SynthesisError(ArithmeticError):
-    pass
+    """No ladder: an extraction step gave a negative or non-finite element, or the
+    remainder is not the expected termination."""
 
 
 def _eval(num, den, s):
@@ -196,7 +197,6 @@ def candidate_sequences(proto: Prototype, limit=720):
 
 def synthesize_all(proto: Prototype, first='shunt'):
     """Every realizable ladder (all extraction orders, both F signs)."""
-    start = 'Y' if first == 'shunt' else 'Z'
     out = []
     for seq in candidate_sequences(proto):
         try:

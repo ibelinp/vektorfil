@@ -18,7 +18,7 @@ import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog,
-                               QFormLayout, QGroupBox, QLabel, QLineEdit, QMainWindow, QMessageBox,
+                               QFormLayout, QGroupBox, QLabel, QLineEdit, QMainWindow,
                                QPushButton, QScrollArea, QSpinBox, QSplitter, QTabWidget,
                                QVBoxLayout, QWidget)
 
@@ -28,11 +28,13 @@ from vektorfil.gui.schematic import SchematicView, eng
 
 
 class _Signals(QObject):
+    """Signals of a background job: done(generation, result) or failed(generation, message)."""
     done = Signal(int, object)
     failed = Signal(int, str)
 
 
 class _Job(QRunnable):
+    """Runs design_diplexer(spec) in the background."""
     def __init__(self, gen, spec):
         super().__init__()
         self.gen, self.spec, self.signals = gen, spec, _Signals()
@@ -85,6 +87,7 @@ class _Channel(QGroupBox):
         self.sync()
 
     def sync(self):
+        """Show the ripple and Amin inputs only for the approximations that use them."""
         shape = self.shape.currentText()
         rip = shape in ("Chebyshev", "Elliptic")
         self.l_ripple.setVisible(rip)
@@ -120,6 +123,7 @@ class DiplexerWindow(QMainWindow):
 
     # ------------------------------------------------------------------ layout
     def _build_left(self):
+        """Inputs: impedance, crossover, and one box per channel."""
         w = QWidget()
         lay = QVBoxLayout(w)
         top = QFormLayout()
@@ -152,6 +156,7 @@ class DiplexerWindow(QMainWindow):
         return w
 
     def _build_right(self):
+        """Both channel schematics over the 3-port response plot."""
         pal = self.palette()
         bg, fg = pal.base().color(), pal.text().color()
         self.sch_lp = SchematicView()
@@ -223,6 +228,7 @@ class DiplexerWindow(QMainWindow):
         self.timer.start()
 
     def _launch(self):
+        """Start a design job for the current inputs (called by the debounce timer)."""
         try:
             spec = self.spec()
         except Exception as e:
@@ -241,11 +247,13 @@ class DiplexerWindow(QMainWindow):
             self.info.setText(f"<span style='color:#c0392b'>{msg.splitlines()[0]}</span>")
 
     def _freqs(self, n=1201):
+        """Plot sweep: up to three times the higher channel frequency."""
         sp = self.result.spec
         top = 3 * max(sp.lp_fc, sp.hp_fc)
         return np.linspace(top * 1e-3, top, n)
 
     def _done(self, gen, dx):
+        """Show a finished diplexer: schematics, curves and the summary."""
         if gen != self.gen:
             return
         self.result = dx

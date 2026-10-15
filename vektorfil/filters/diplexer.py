@@ -35,6 +35,8 @@ CHANNEL_SHAPES = ("Butterworth", "Chebyshev", "Elliptic")
 
 @dataclass
 class DiplexSpec:
+    """What the diplexer window specifies: impedance and, per channel, approximation,
+    order, 3 dB frequency, ripple and (elliptic) stopband attenuation."""
     r0: float = 50.0
     lp_shape: str = "Butterworth"
     lp_order: int = 5
@@ -51,6 +53,8 @@ class DiplexSpec:
 
 @dataclass
 class Diplexer:
+    """A designed diplexer: the two channel ladders, both drawn from the common port,
+    and their joint 3-port analysis (sparams, touchstone_s3p)."""
     spec: DiplexSpec
     lp: Ladder                    # common port -> lowpass output (load r0)
     hp: Ladder                    # common port -> highpass output (load r0)
@@ -66,6 +70,7 @@ class Diplexer:
         return (C * r + D) / (A * r + B), (A, B, C, D)
 
     def _ycorr(self, f):
+        """Admittance of the optional shunt series-LC corrector at the common port."""
         if not self.corr:
             return np.zeros(len(np.atleast_1d(f)), complex)
         L, C = self.corr

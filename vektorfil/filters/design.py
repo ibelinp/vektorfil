@@ -10,6 +10,8 @@ between the cutoff points (the Aa points; the ripple points for Chebyshev/ellipt
 from __future__ import annotations
 
 import math
+import re
+import threading
 import time
 from dataclasses import dataclass, field, replace
 
@@ -21,7 +23,7 @@ from vektorfil.synth import approx
 from vektorfil.synth import bandpass as bpsyn
 from vektorfil.synth.bandxform import transform
 from vektorfil.synth.symmetric import design_symmetric
-from vektorfil.synth.coupled import (CouplingError, default_resonator, design_coupled, resonator_limit,
+from vektorfil.synth.coupled import (default_resonator, design_coupled, resonator_limit,
                                     resonator_range, to_tubular)
 from vektorfil.synth.ladder import synthesize
 from vektorfil.synth.network import Ladder
@@ -98,7 +100,9 @@ class FilterSpec:
     r_source: float = 50.0
     ripple_db: float = 0.1          # passband ripple (Chebyshev, Elliptic)
     aa_db: float | None = None      # attenuation at the cutoff(s); None = default
-    elliptic_spec: str = "Amin"     # 'Amin' or 'Fs'
+    elliptic_spec: str = "Amin"     # 'Amin', 'Fs' or 'Mask'
+    mask: tuple = ()                # elliptic 'Mask': ((f_start, f_stop, A_dB), ...) in Hz;
+                                    # f_stop may be inf (lowpass side) or 0 (highpass side)
     amin_db: float = 60.0           # elliptic minimum stopband attenuation
     fs: float = 150e6               # elliptic stopband frequency (Hz) when elliptic_spec == 'Fs'
     even_type: str = "C"            # even-order elliptic: 'C' equal terminations, 'B' unequal
@@ -164,6 +168,64 @@ def from_proto(spec: FilterSpec, w, bw=None):
 
 # --------------------------------------------------------------------------- prototype
 
+def parse_mask(text: str, unit: float = 1e6) -> tuple:
+    """'125-200:40, 200-:70' -> ((125e6, 200e6, 40), (200e6, inf, 70)).
+
+    Each segment is start-stop:attenuation, frequencies in `unit` (MHz) and attenuation
+    in dB; an empty stop means "and beyond" (for a highpass write e.g. '0-60:50')."""
+    segs = []
+    for part in re.split(r"[;,\n]+", text):
+        part = part.strip()
+        if not part:
+            continue
+        m = re.fullmatch(r"([\d.eE+]+)\s*-\s*([\d.eE+]*)\s*:\s*([\d.eE+]+)\s*(?:dB)?", part)
+        if not m:
+            raise ValueError(f"cannot read mask segment '{part}' (use start-stop:dB)")
+        f1 = float(m.group(1)) * unit
+        f2 = float(m.group(2)) * unit if m.group(2) else math.inf
+        segs.append((f1, f2, float(m.group(3))))
+    if not segs:
+        raise ValueError("enter at least one mask segment, e.g. 125-200:40")
+    return tuple(segs)
+
+
+def format_mask(mask) -> str:
+    """Inverse of parse_mask (MHz)."""
+    return ", ".join(f"{a / 1e6:g}-{'' if math.isinf(b) else f'{b / 1e6:g}'}:{d:g}" for a, b, d in mask)
+
+
+def _mask_prototype(spec: FilterSpec):
+    """Elliptic-type prototype whose zeros are placed against a stepped stopband mask
+    (PLACER): the order is the user's, the zeros give every mask step the same margin."""
+    from vektorfil.synth.placer import Mask, place
+    if not spec.mask:
+        raise ValueError("enter a stopband mask, e.g. 125-200:40, 200-:70")
+
+    def w_of(f):
+        if f == 0:
+            return math.inf if spec.ftype in ("Highpass", "Bandpass") else 0.0
+        if math.isinf(f):
+            return 0.0 if spec.ftype in ("Highpass", "Bandstop") else math.inf
+        return float(to_proto(spec, f))
+
+    segs = []
+    for f1, f2, a in spec.mask:
+        if spec.ftype == "Bandpass" and min(f1, f2) < spec.fc < max(f1, f2):
+            raise ValueError("a mask segment may not span the passband")
+        w1, w2 = sorted((w_of(f1), w_of(f2)))
+        if w1 <= 1.0:
+            raise ValueError("the mask reaches into the passband")
+        segs.append((w1, w2, a))
+    n = int(spec.order)
+    odd = n % 2 == 1
+    pl = place(order=n, ripple_db=spec.ripple_db, mask=Mask(segs), n_inf=1 if odd else 2,
+               zs=None if odd else spec.even_type)
+    proto = pl.prototype()
+    proto.meta["placer"] = pl
+    proto.meta["mask_margin"] = pl.margin_db
+    return proto
+
+
 def _prototype(spec: FilterSpec):
     """The normalised lowpass prototype (1 ohm, passband edge 1 rad/s) for the spec shape."""
     n = int(spec.order)
@@ -176,6 +238,8 @@ def _prototype(spec: FilterSpec):
     if spec.shape == "Elliptic":
         if n < 3:
             raise ValueError("Elliptic filters need order 3 or more")
+        if spec.elliptic_spec == "Mask":
+            return _mask_prototype(spec)
         if spec.elliptic_spec == "Fs":
             ws = to_proto(spec, spec.fs)
             if ws <= 1:
@@ -238,6 +302,12 @@ MAX_ORDER = {"Butterworth": 25, "Chebyshev": 25, "Bessel": 15, "Elliptic": 25,
              "Butterworth" + SINGLE: 25, "Chebyshev" + SINGLE: 25, "Elliptic" + SINGLE: 25}
 
 
+# mpmath keeps its working precision in one global context, so two syntheses must never
+# run at the same time (e.g. the filter and the diplexer window, each with its own
+# worker thread).  Re-entrant: the diplexer designs its channels through design().
+_MP_LOCK = threading.RLock()
+
+
 def design(spec: FilterSpec) -> DesignResult:
     """Turn a FilterSpec into a finished, denormalised ladder.
 
@@ -253,7 +323,7 @@ def design(spec: FilterSpec) -> DesignResult:
     if spec.order > MAX_ORDER.get(spec.shape, 25):
         raise ValueError(f"{spec.shape} filters are limited to order {MAX_ORDER[spec.shape]}")
     from vektorfil.synth.ladder import SynthesisError
-    with mp.workdps(max(50, 60 + 3 * int(spec.order))):
+    with _MP_LOCK, mp.workdps(max(50, 60 + 3 * int(spec.order))):
         try:
             return _design(spec)
         except (SynthesisError, ArithmeticError, ZeroDivisionError) as e:
@@ -495,6 +565,11 @@ def _design(spec: FilterSpec) -> DesignResult:
         for z in sorted(float(z) for z in proto.zeros):
             zs += list(from_proto(spec, z / w_scale))
         info["zeros"] = sorted(zs)
+        if "mask_margin" in proto.meta:
+            info["mask_margin_db"] = float(proto.meta["mask_margin"])
+            if info["mask_margin_db"] < -0.01:
+                warnings.append(f"The mask is missed by {-info['mask_margin_db']:.2f} dB: raise the order "
+                                "or relax the mask")
     info["sum_g"] = sum(g_vals[1:-1])
     # realism check: element reactance far from the impedance level
     f_ref = spec.fc

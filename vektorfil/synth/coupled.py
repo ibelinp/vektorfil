@@ -25,7 +25,8 @@ from .network import Ladder
 
 
 class CouplingError(ValueError):
-    pass
+    """The coupled-resonator design is not realizable with this resonator value
+    (an element would turn negative or an end coupling cannot be made)."""
 
 
 def qe_k(g, w):

@@ -6,12 +6,12 @@ from __future__ import annotations
 
 import datetime
 import math
-import os
 import re
 import sys
 import traceback
 import weakref
 from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
 import pyqtgraph as pg
@@ -25,13 +25,19 @@ from PySide6.QtWidgets import (QAbstractSpinBox, QApplication, QButtonGroup, QCh
                                QWidget)
 
 from vektorfil import __version__, app_paths
-from vektorfil.filters import (SERIES_NAMES, SHUNT_FIRST, TYPES, FilterSpec, auto_freqs, design,
-                              estimate_orders, resonator_unit, subtypes)
-from vektorfil.filters.design import SINGLE
+from vektorfil.analysis import timedomain
+from vektorfil.filters import (SERIES_NAMES, SHUNT_FIRST, TYPES, FilterSpec, auto_freqs, canonical_subtype,
+                              design, estimate_orders, project, resonator_unit, subtypes)
+from vektorfil.filters.design import SINGLE, format_mask, parse_mask
+from vektorfil.gui.montecarlo_tab import MonteCarloTab
+from vektorfil.gui.plotstyle import C_EXTRA, C_IDEAL, C_MARK, C_S11, C_S21, faded, new_plot
+from vektorfil.gui.schematic import SchematicView, eng
+from vektorfil.gui.smith import SmithChart
 
 APPROXIMATIONS = ("Butterworth", "Chebyshev", "Bessel", "Elliptic")
 SINGLE_OK = ("Butterworth", "Chebyshev", "Elliptic")      # approximations with a singly terminated form
-from vektorfil.gui.schematic import SchematicView, eng
+ELLIPTIC_BY = ("Amin", "Fs", "Mask")                      # FilterSpec.elliptic_spec per list entry
+MAX_MARKERS = 6
 
 GITHUB_URL = "https://github.com/ibelinp/vektorfil"
 
@@ -94,6 +100,7 @@ class EngSpinBox(QAbstractSpinBox):
         return self.auto_hint if v is None else v
 
     def stepEnabled(self):
+        """Qt hook: grey out an arrow at the end of the usable range."""
         flags = QAbstractSpinBox.StepUpEnabled | QAbstractSpinBox.StepDownEnabled
         v = self._current()
         if self.limits and v:
@@ -105,6 +112,7 @@ class EngSpinBox(QAbstractSpinBox):
         return flags
 
     def stepBy(self, steps):
+        """Qt hook: multiply the value by ratio**steps, kept inside the limits."""
         v = self._current()
         if not v or v <= 0:
             return
@@ -115,14 +123,66 @@ class EngSpinBox(QAbstractSpinBox):
         self.setText(f"{v / self.unit_mult:.5g}")
 
 
+# --------------------------------------------------------------------------- plot cursor
+
+class PlotCursor:
+    """Hover cursor for one plot: a dashed vertical line, a dot where it crosses each
+    curve (in the curve's colour), and the values in a small box beside the line."""
+    def __init__(self, plot, fg, bg):
+        self.vb = plot.getPlotItem().vb
+        self.line = pg.InfiniteLine(angle=90, movable=False,
+                                    pen=pg.mkPen(fg, width=0.8, style=Qt.DashLine))
+        self.dots = pg.ScatterPlotItem(pxMode=True)
+        box = pg.mkColor(bg)
+        box.setAlpha(215)
+        edge = pg.mkColor(fg)
+        edge.setAlpha(90)
+        self.label = pg.TextItem(color=fg, fill=pg.mkBrush(box), border=pg.mkPen(edge))
+        self.dots.setZValue(20)
+        self.label.setZValue(30)
+        for item in (self.line, self.dots, self.label):
+            plot.addItem(item, ignoreBounds=True)
+        self.fg = fg
+        self.hide()
+
+    def hide(self):
+        for item in (self.line, self.dots, self.label):
+            item.setVisible(False)
+
+    def contains(self, pos):
+        return self.vb.sceneBoundingRect().contains(pos)
+
+    def x_at(self, pos):
+        return self.vb.mapSceneToView(pos).x()
+
+    def show(self, x, text, points):
+        """points: (y, colour) pairs; values outside the view (or -inf at a notch) get no dot."""
+        (x0, x1), (y0, y1) = self.vb.viewRange()
+        spots = [{"pos": (x, y), "size": 9, "symbol": "o", "brush": pg.mkBrush(c), "pen": pg.mkPen(self.fg, width=1)}
+                 for y, c in points if np.isfinite(y) and y0 <= y <= y1]
+        self.dots.setData(spots=spots)
+        self.line.setPos(x)
+        self.label.setText(text)
+        # beside the line near the top; on the left side when close to the right edge
+        right = x < x0 + 0.72 * (x1 - x0)
+        dx = 0.012 * (x1 - x0)
+        self.label.setAnchor((0, 0) if right else (1, 0))
+        self.label.setPos(x + dx if right else x - dx, y1 - 0.03 * (y1 - y0))
+        for item in (self.line, self.dots, self.label):
+            item.setVisible(True)
+
+
 # --------------------------------------------------------------------------- worker
 
 class _Signals(QObject):
+    """Signals of a background job: done(generation, result) or failed(generation, message)."""
     done = Signal(int, object)
     failed = Signal(int, str)
 
 
 class DesignJob(QRunnable):
+    """Runs design(spec) in the worker thread and reports through _Signals; gen tells a
+    current request from a stale one."""
     def __init__(self, gen, spec):
         super().__init__()
         self.gen, self.spec, self.signals = gen, spec, _Signals()
@@ -184,6 +244,8 @@ class FilterWindow(QMainWindow):
         self.pool.setMaxThreadCount(1)
         self.gen = 0
         self.result = None
+        self.path = None              # design file shown in the title bar
+        self.remember_last = False    # main() sets this: save the design on close for the next start
         self.timer = QTimer(self, singleShot=True, interval=120)
         self.timer.timeout.connect(self._launch)
 
@@ -201,12 +263,24 @@ class FilterWindow(QMainWindow):
         self.schedule()
 
     # ------------------------------------------------------------------ left panel
-    @staticmethod
-    def _heading(num, title):
-        """Section heading of the specification panel: a step number and a title."""
-        lab = QLabel(f"<span style='font-size:13pt'>{num}</span>&nbsp; <b>{title}</b>")
-        lab.setContentsMargins(0, 10, 0, 2)
-        return lab
+    def _heading(self, num, title):
+        """Section heading of the specification panel: the step number in a round badge
+        (highlight colour) followed by the title."""
+        box = QWidget()
+        row = QHBoxLayout(box)
+        row.setContentsMargins(0, 10, 0, 2)
+        row.setSpacing(8)
+        badge = QLabel(str(num))
+        badge.setFixedSize(20, 20)
+        badge.setAlignment(Qt.AlignCenter)
+        hl = self.palette().highlight().color().name()
+        badge.setStyleSheet(f"QLabel {{ background: {hl}; color: white; border-radius: 10px; "
+                            f"font-weight: bold; font-size: 9pt; }}")
+        text = QLabel(f"<b>{title}</b>")
+        row.addWidget(badge)
+        row.addWidget(text)
+        row.addStretch(1)
+        return box
 
     def _build_left(self):
         """Left panel: the specification in five steps (response, approximation,
@@ -216,7 +290,7 @@ class FilterWindow(QMainWindow):
         col.setSpacing(4)
 
         # 1  Response: a row of toggle buttons
-        col.addWidget(self._heading("①", "Response"))
+        col.addWidget(self._heading(1, "Response"))
         row = QHBoxLayout()
         row.setSpacing(2)
         self.type_group = QButtonGroup(self)
@@ -229,7 +303,7 @@ class FilterWindow(QMainWindow):
         col.addLayout(row)
 
         # 2  Approximation
-        col.addWidget(self._heading("②", "Approximation"))
+        col.addWidget(self._heading(2, "Approximation"))
         f2 = QFormLayout()
         self.c_approx = QComboBox()
         self.c_approx.addItems(APPROXIMATIONS)
@@ -246,7 +320,7 @@ class FilterWindow(QMainWindow):
         col.addLayout(f2)
 
         # 3  Circuit
-        col.addWidget(self._heading("③", "Circuit"))
+        col.addWidget(self._heading(3, "Circuit"))
         self.c_circuit = QComboBox()
         self.c_circuit.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.c_circuit.setMinimumContentsLength(20)
@@ -255,7 +329,7 @@ class FilterWindow(QMainWindow):
         col.addWidget(self.c_circuit)
 
         # 4  Specification
-        col.addWidget(self._heading("④", "Specification"))
+        col.addWidget(self._heading(4, "Specification"))
         form = QFormLayout()
         self.e_rs = QLineEdit("50")
         self.e_fc = EngSpinBox("100", 1e6, ratio=1.01)       # 1 % per click
@@ -293,13 +367,19 @@ class FilterWindow(QMainWindow):
         self.e_aa = QLineEdit("")
         self.e_aa.setPlaceholderText("default")
         self.c_espec = QComboBox()
-        self.c_espec.addItems(["Minimum attenuation", "Stopband frequency"])
+        self.c_espec.addItems(["Minimum attenuation", "Stopband frequency", "Stepped mask"])
         self.e_amin = QDoubleSpinBox()
         self.e_amin.setDecimals(2)
         self.e_amin.setRange(1.0, 200.0)
         self.e_amin.setSingleStep(1.0)
         self.e_amin.setValue(60.0)
         self.e_fs = QLineEdit("150")
+        # stepped stopband mask: start-stop:dB segments in MHz (the zeros are placed to meet it)
+        self.e_mask = QLineEdit("125-200:40, 200-:60")
+        self.e_mask.setToolTip("Segments start-stop:attenuation in MHz and dB, separated by commas; an empty "
+                               "stop means 'and above' (e.g. 125-200:40, 200-:60). The notches are placed "
+                               "so that every step has the same margin.")
+        self.l_mask = QLabel("Mask (MHz:dB)")
         self.l_amin = QLabel("Stopband Amin (dB)")
         self.l_fs = QLabel("Stopband Fs (MHz)")
         self.l_espec = QLabel("Stopband set by")
@@ -316,6 +396,7 @@ class FilterWindow(QMainWindow):
         form.addRow(self.l_espec, self.c_espec)
         form.addRow(self.l_amin, self.e_amin)
         form.addRow(self.l_fs, self.e_fs)
+        form.addRow(self.l_mask, self.e_mask)
         form.addRow(self.l_res, self.e_res)
         # coaxial resonators: line length at the centre frequency
         self.e_theta = QDoubleSpinBox()
@@ -341,7 +422,7 @@ class FilterWindow(QMainWindow):
         col.addLayout(form)
 
         # 5  Components
-        col.addWidget(self._heading("⑤", "Components"))
+        col.addWidget(self._heading(5, "Components"))
         f5 = QFormLayout()
         self.c_std = QComboBox()
         self.c_std.addItems(SERIES_NAMES)
@@ -385,7 +466,8 @@ class FilterWindow(QMainWindow):
         self.chk_single.toggled.connect(reselect)
         for e in (self.e_ripple, self.e_amin, self.e_theta):
             e.valueChanged.connect(self.schedule)
-        for e in (self.e_rs, self.e_fc, self.e_bw, self.e_res, self.e_aa, self.e_fs, self.e_ql, self.e_qc):
+        for e in (self.e_rs, self.e_fc, self.e_bw, self.e_res, self.e_aa, self.e_fs, self.e_mask,
+                  self.e_ql, self.e_qc):
             e.textChanged.connect(self.schedule)
         self.s_order.valueChanged.connect(self.schedule)
         for c in (self.chk_edges, self.chk_coils, self.chk_retune):
@@ -426,24 +508,49 @@ class FilterWindow(QMainWindow):
                 pi.getAxis(ax).setTextPen(fg)
                 pi.getAxis(ax).setPen(fg)
             pi.addLegend(offset=(-10, 10))
-        self.c_ideal = self.plot_resp.plot(name="S21 ideal", pen=pg.mkPen((140, 140, 140), width=1.2, style=Qt.DashLine))
-        self.c_s21 = self.plot_resp.plot(name="S21", pen=pg.mkPen("#2f7ed8", width=2))
-        self.c_s11 = self.plot_resp.plot(name="S11", pen=pg.mkPen("#e4572e", width=1.5))
-        self.c_gd = self.plot_gd.plot(name="Group delay", pen=pg.mkPen("#2f7ed8", width=2))
+        self.c_ideal = self.plot_resp.plot(name="S21 ideal", pen=pg.mkPen(C_IDEAL, width=1.2, style=Qt.DashLine))
+        self.c_s21 = self.plot_resp.plot(name="S21", pen=pg.mkPen(C_S21, width=2))
+        self.c_s11 = self.plot_resp.plot(name="S11", pen=pg.mkPen(C_S11, width=1.5))
+        self.c_gd = self.plot_gd.plot(name="Group delay", pen=pg.mkPen(C_S21, width=2))
+        self.c_mask = self.plot_resp.plot(pen=pg.mkPen(C_EXTRA, width=1.5, style=Qt.DashLine),  # no legend entry
+                                          connect="finite")
         self.plot_resp.setYRange(-80, 2)
-        self.readout = pg.TextItem(anchor=(0, 0), color=fg)
-        self.plot_resp.addItem(self.readout, ignoreBounds=True)
-        self.vline = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen(fg, width=0.6, style=Qt.DashLine))
-        self.plot_resp.addItem(self.vline, ignoreBounds=True)
-        self.plot_resp.scene().sigMouseMoved.connect(self._mouse)
+        # markers: click the response plot to place one, click it again to remove it
+        self.markers = []
+        self.mark_dots = pg.ScatterPlotItem(pxMode=True)
+        self.mark_dots.setZValue(25)
+        self.plot_resp.addItem(self.mark_dots, ignoreBounds=True)
+        self.mark_labels = []
+        box = pg.mkColor(bg)
+        box.setAlpha(215)
+        self.mark_box = pg.TextItem(color=fg, fill=pg.mkBrush(box), border=pg.mkPen(faded(fg, 90)), anchor=(0, 1))
+        self.mark_box.setZValue(30)
+        self.plot_resp.addItem(self.mark_box, ignoreBounds=True)
+        self.plot_resp.scene().sigMouseClicked.connect(self._click)
+        self._fg = fg
+        # hover cursors (each plot has its own scene)
+        self.cur_resp = PlotCursor(self.plot_resp, fg, bg)
+        self.cur_gd = PlotCursor(self.plot_gd, fg, bg)
+        self.plot_resp.scene().sigMouseMoved.connect(lambda pos: self._mouse(self.cur_resp, pos))
+        self.plot_gd.scene().sigMouseMoved.connect(lambda pos: self._mouse(self.cur_gd, pos))
 
         self.elements = QPlainTextEdit(readOnly=True)
         self.elements.setFont(QFont("Consolas", 10))
 
+        self.smith = SmithChart(fg, bg)
+        self.plot_td = new_plot(bg, fg, left="Step / impulse", bottom="Time", bottom_units="s")
+        self.c_step = self.plot_td.plot(name="Step response", pen=pg.mkPen(C_S21, width=2))
+        self.c_imp = self.plot_td.plot(name="Impulse response (peak = 1)", pen=pg.mkPen(C_EXTRA, width=1.5))
+        self.mc_tab = MonteCarloTab(self, fg, bg)
+
         self.tabs = QTabWidget()
         self.tabs.addTab(self.plot_resp, "Response")
         self.tabs.addTab(self.plot_gd, "Group delay")
+        self.tabs.addTab(self.smith, "Smith chart")
+        self.tabs.addTab(self.plot_td, "Time domain")
+        self.tabs.addTab(self.mc_tab, "Monte Carlo")
         self.tabs.addTab(self.elements, "Element values")
+        self.tabs.currentChanged.connect(lambda *_: self._update_time())
 
         # the schematic keeps a readable minimum size; long ladders scroll sideways
         scroll = QScrollArea()
@@ -456,11 +563,26 @@ class FilterWindow(QMainWindow):
         split.addWidget(self.tabs)
         split.addWidget(scroll)
         split.setSizes([520, 300])
+        self.right_split = split
         return split
 
     def _build_menu(self):
-        """File: exports, copy, quit.  View: plot range.  Tools: diplexer.  Help."""
+        """File: designs, exports, copy, quit.  View: plot range, markers.  Tools: diplexer,
+        coil.  Help."""
         m = self.menuBar().addMenu("&File")
+        for text, key, slot in (("Open design…", "Ctrl+O", self.open_design), ("Save design", "Ctrl+S", self.save_design),
+                                ("Save design as…", "Ctrl+Shift+S", self.save_design_as)):
+            a = QAction(text, self)
+            a.setShortcut(key)
+            a.triggered.connect(slot)
+            m.addAction(a)
+        m.addSeparator()
+        a = QAction("Export report (PDF)…", self)
+        a.triggered.connect(self.export_report)
+        m.addAction(a)
+        a = QAction("Save picture (PNG)…", self)
+        a.triggered.connect(self.save_picture)
+        m.addAction(a)
         a = QAction("Export S2P (Touchstone)…", self)
         a.triggered.connect(self.export_s2p)
         m.addAction(a)
@@ -478,9 +600,15 @@ class FilterWindow(QMainWindow):
         a = QAction("Plot range…", self)
         a.triggered.connect(lambda: (self.range_dlg.show(), self.range_dlg.raise_()))
         v.addAction(a)
+        a = QAction("Clear markers", self)
+        a.triggered.connect(self.clear_markers)
+        v.addAction(a)
         t = self.menuBar().addMenu("&Tools")
         a = QAction("Diplexer…", self)
         a.triggered.connect(self.open_diplexer)
+        t.addAction(a)
+        a = QAction("Air-core coil…", self)
+        a.triggered.connect(self.open_coil)
         t.addAction(a)
         h = self.menuBar().addMenu("&Help")
         a = QAction("User guide", self)
@@ -615,15 +743,18 @@ class FilterWindow(QMainWindow):
             self.e_res.auto_hint = None
             self.e_res.setText("")
         ell = base_shape == "Elliptic"
-        by_amin = self.c_espec.currentIndex() == 0
+        by = ELLIPTIC_BY[self.c_espec.currentIndex()]
+        by_amin = by == "Amin"
         for w in (self.l_espec, self.c_espec):
             w.setVisible(ell)
         self.l_amin.setVisible(ell and by_amin)
         self.e_amin.setVisible(ell and by_amin)
-        self.l_fs.setVisible(ell and not by_amin)
+        self.l_fs.setVisible(ell and by == "Fs")
+        self.l_mask.setVisible(ell and by == "Mask")
+        self.e_mask.setVisible(ell and by == "Mask")
         self.l_fs.setText("Stopband Fs (MHz)" + (" (upper)" if ftype == "Bandpass" else
                                                   " (lower)" if ftype == "Bandstop" else ""))
-        self.e_fs.setVisible(ell and not by_amin)
+        self.e_fs.setVisible(ell and by == "Fs")
         self.l_even.setVisible(ell)
         self.c_even.setVisible(ell)
         rip = base_shape in ("Chebyshev", "Elliptic")
@@ -659,7 +790,10 @@ class FilterWindow(QMainWindow):
             r_source=parse_value(self.e_rs.text()),
             ripple_db=self.e_ripple.value(),
             aa_db=parse_value(self.e_aa.text()),
-            elliptic_spec=("Amin", "Fs")[self.c_espec.currentIndex()],
+            elliptic_spec=ELLIPTIC_BY[self.c_espec.currentIndex()],
+            mask=(parse_mask(self.e_mask.text())
+                  if ELLIPTIC_BY[self.c_espec.currentIndex()] == "Mask" and self.c_approx.currentText() == "Elliptic"
+                  else ()),
             amin_db=self.e_amin.value(),
             fs=parse_value(self.e_fs.text(), 1e6) or 0,
             even_type="CB"[self.c_even.currentIndex()],
@@ -724,6 +858,7 @@ class FilterWindow(QMainWindow):
         self.result = res
         lad = res.ladder
         self.schematic.set_ladder(lad)
+        self.mc_tab.clear()          # a spread belongs to the design it was computed for
         txt = lad.title + "\n\n" + lad.table()
         if res.ideal_ladder is not None:
             txt += "\n\nIdeal (unrounded) values:\n" + res.ideal_ladder.table()
@@ -758,6 +893,10 @@ class FilterWindow(QMainWindow):
             lo_r, hi_r = inf.get("resonator_range", (inf["resonator_limit"],) * 2)
             rows.append(f"{what}: <b>{eng(inf['resonator'], u)}</b> "
                         f"(usable {eng(lo_r, u)} … {eng(hi_r, u)})")
+        if "mask_margin_db" in inf:
+            m = inf["mask_margin_db"]
+            colour = "" if m >= -0.01 else " style='color:#c0392b'"
+            rows.append(f"<span{colour}>Mask margin: <b>{m:+.2f} dB</b></span>")
         if inf.get("zeros"):
             rows.append("Transmission zeros: " + ", ".join(eng(z, "Hz") for z in inf["zeros"]))
         if "std" in inf:
@@ -801,7 +940,15 @@ class FilterWindow(QMainWindow):
         self.plot_resp.setYRange(lo, 2)
         self.plot_resp.setXRange(f[0], f[-1], padding=0)
         self.plot_gd.setXRange(f[0], f[-1], padding=0)
-        self._resp_cache = (f, r)
+        self._resp_cache = (f, r, ri["s21_db"] if self.result.ideal_ladder is not None else None)
+        self.cur_resp.hide()
+        self.cur_gd.hide()
+        self.smith.set_data(f, self.result.ladder.sparams(f)[0], self.result.ladder.r_source)
+        self._draw_mask(f)
+        # markers outside the plotted range (left from another design) are dropped
+        self.markers = [m for m in self.markers if f[0] <= m <= f[-1]]
+        self._draw_markers()
+        self._update_time()
         if self.chk_auto.isChecked():
             # show the automatic range in Start/Stop (this is also what Export S2P uses)
             for e, v in ((self.e_f1, f[0]), (self.e_f2, f[-1])):
@@ -809,20 +956,267 @@ class FilterWindow(QMainWindow):
                 e.setText(f"{v / 1e6:.6g}")
                 e.blockSignals(False)
 
-    def _mouse(self, pos):
-        """Hover readout: frequency, S21 and S11 at the mouse position."""
-        if self.result is None or not hasattr(self, "_resp_cache"):
+    def _mouse(self, cur, pos):
+        """Hover readout on the response or delay plot: the values at the nearest
+        computed frequency, with dots on the curves."""
+        if self.result is None or not hasattr(self, "_resp_cache") or not cur.contains(pos):
+            cur.hide()
+            return
+        f, r, ideal = self._resp_cache
+        x = cur.x_at(pos)
+        i = int(np.clip(np.searchsorted(f, x), 0, len(f) - 1))
+        if i > 0 and abs(f[i - 1] - x) < abs(f[i] - x):
+            i -= 1
+        s21, s11 = r["s21_db"][i], r["s11_db"][i]
+        if cur is self.cur_gd:
+            gd = r["gd"][i] * 1e9
+            cur.show(f[i], f"{eng(f[i], 'Hz')}\nDelay {gd:.4g} ns\nS21 {s21:.3f} dB", [(gd, C_S21)])
+            return
+        self.smith.mark(i)
+        lines = [eng(f[i], "Hz"), f"S21 {s21:.3f} dB", f"S11 {s11:.2f} dB"]
+        points = [(s21, C_S21), (s11, C_S11)]
+        if ideal is not None:
+            lines.append(f"ideal {ideal[i]:.3f} dB")
+            points.append((ideal[i], C_IDEAL))
+        cur.show(f[i], "\n".join(lines), points)
+
+    def _draw_mask(self, f):
+        """The stepped stopband mask as dashed steps at -A dB (elliptic 'Stepped mask')."""
+        sp = self.result.spec
+        if sp.elliptic_spec != "Mask" or not sp.mask or not sp.shape.startswith("Elliptic"):
+            self.c_mask.setData([], [])
+            return
+        xs, ys = [], []
+        for a, b, db in sp.mask:
+            b = min(b, f[-1]) if math.isinf(b) else b
+            xs += [a, b, np.nan]
+            ys += [-db, -db, np.nan]
+        self.c_mask.setData(xs, ys)
+
+    # ------------------------------------------------------------------ markers
+    def _click(self, ev):
+        """Left click on the response plot: place a marker, or remove the one clicked."""
+        if ev.button() != Qt.LeftButton or self.result is None:
             return
         vb = self.plot_resp.getPlotItem().vb
-        if not self.plot_resp.sceneBoundingRect().contains(pos):
+        if not vb.sceneBoundingRect().contains(ev.scenePos()):
             return
-        x = vb.mapSceneToView(pos).x()
-        f, r = self._resp_cache
-        i = int(np.clip(np.searchsorted(f, x), 0, len(f) - 1))
-        self.vline.setPos(f[i])
-        self.readout.setText(f"{eng(f[i], 'Hz')}\nS21 {r['s21_db'][i]:.3f} dB\nS11 {r['s11_db'][i]:.2f} dB")
-        (x0, x1), (y0, y1) = vb.viewRange()
-        self.readout.setPos(x0 + 0.02 * (x1 - x0), y1 - 0.02 * (y1 - y0))
+        x = vb.mapSceneToView(ev.scenePos()).x()
+        (x0, x1), _ = vb.viewRange()
+        near = [m for m in self.markers if abs(m - x) < 0.01 * (x1 - x0)]
+        if near:
+            self.markers.remove(near[0])
+        elif len(self.markers) < MAX_MARKERS and x > 0:
+            self.markers.append(x)
+        self._draw_markers()
+
+    def clear_markers(self):
+        self.markers = []
+        self._draw_markers()
+
+    def _draw_markers(self):
+        """A numbered triangle on S21 and on S11 at each marker frequency, and a small
+        table of the values in the lower left corner."""
+        for lab in self.mark_labels:
+            self.plot_resp.removeItem(lab)
+        self.mark_labels = []
+        if not self.markers or self.result is None:
+            self.mark_dots.setData([])
+            self.mark_box.setVisible(False)
+            return
+        fm = np.array(self.markers)
+        s11, s21 = self.result.ladder.sparams(fm)
+        d21 = 20 * np.log10(np.abs(s21) + 1e-300)
+        d11 = 20 * np.log10(np.abs(s11) + 1e-300)
+        (x0, x1), (y0, y1) = self.plot_resp.getPlotItem().vb.viewRange()
+        spots = []
+        for k, f in enumerate(fm, 1):
+            for y, colour in ((d21[k - 1], C_S21), (d11[k - 1], C_S11)):
+                if not (np.isfinite(y) and y0 <= y <= y1):
+                    continue
+                spots.append({"pos": (f, y), "symbol": "t", "size": 12, "brush": pg.mkBrush(colour),
+                              "pen": pg.mkPen(self._fg, width=1)})
+                lab = pg.TextItem(str(k), color=self._fg, anchor=(0.5, 1.25))
+                lab.setPos(f, y)
+                lab.setZValue(26)
+                self.plot_resp.addItem(lab, ignoreBounds=True)
+                self.mark_labels.append(lab)
+        self.mark_dots.setData(spots=spots)
+        fg = pg.mkColor(self._fg).name()
+        cell = "style='padding:0px 10px 0px 0px'"
+        rows = [f"<tr><th {cell}></th><th {cell} align=left>Frequency</th>"
+                f"<th {cell} align=right style='color:{C_S21}'>S21</th>"
+                f"<th {cell} align=right style='color:{C_S11}'>S11</th></tr>"]
+        for k, (f, a, b) in enumerate(zip(fm, d21, d11), 1):
+            rows.append(f"<tr><td {cell}><b>{k}</b></td><td {cell}>{eng(f, 'Hz')}</td>"
+                        f"<td {cell} align=right>{a:.3f} dB</td><td {cell} align=right>{b:.2f} dB</td></tr>")
+        self.mark_box.setHtml(f"<table style='color:{fg}' cellspacing=4>{''.join(rows)}</table>")
+        self.mark_box.setPos(x0 + 0.01 * (x1 - x0), y0 + 0.03 * (y1 - y0))
+        self.mark_box.setVisible(True)
+
+    # ------------------------------------------------------------------ time domain
+    def _update_time(self):
+        """Step and impulse response; computed only while the Time domain tab is shown."""
+        if self.result is None or self.tabs.currentWidget() is not self.plot_td:
+            return
+        f_max, t_end = timedomain.auto_window(self.result.spec, self.result.info)
+        tr = timedomain.time_response(self.result.ladder, f_max)
+        sel = tr.t <= t_end
+        imp = tr.impulse[sel]
+        peak = float(np.max(np.abs(imp))) or 1.0
+        self.c_step.setData(tr.t[sel], tr.step[sel])
+        self.c_imp.setData(tr.t[sel], imp / peak)
+        self.plot_td.setXRange(0, t_end, padding=0)
+
+    # ------------------------------------------------------------------ design files
+    def view_state(self) -> dict:
+        """Window settings stored in a design file next to the specification."""
+        return {"order_estimate": [self.e_est_a.text(), self.e_est_f.text()],
+                "plot_range": {"auto": self.chk_auto.isChecked(), "start": self.e_f1.text(),
+                               "stop": self.e_f2.text(), "points": self.s_pts.value()},
+                "markers": list(self.markers), "monte_carlo": self.mc_tab.settings()}
+
+    def apply_spec(self, spec: FilterSpec, view: dict | None = None):
+        """Set every input from a FilterSpec (and window settings), then redesign."""
+        spec = replace(spec, subtype=canonical_subtype(spec.ftype, spec.subtype))
+        base, single = (spec.shape[:-len(SINGLE)], True) if spec.shape.endswith(SINGLE) else (spec.shape, False)
+        self.select(ftype=spec.ftype, approximation=base, single=single)
+        if spec.subtype in self.sub_names:
+            self.c_circuit.setCurrentIndex(self.sub_names.index(spec.subtype))
+        self.c_espec.setCurrentIndex(ELLIPTIC_BY.index(spec.elliptic_spec) if spec.elliptic_spec in ELLIPTIC_BY else 0)
+        self.c_even.setCurrentIndex(1 if spec.even_type == "B" else 0)
+        self._sync_visibility()
+        self.e_rs.setText(f"{spec.r_source:.6g}")
+        self.e_fc.setText(f"{spec.fc / 1e6:.6g}")
+        self.e_bw.setText(f"{spec.bw / 1e6:.6g}")
+        self.s_order.setValue(int(spec.order))
+        self.e_ripple.setValue(spec.ripple_db)
+        self.e_aa.setText("" if spec.aa_db is None else f"{spec.aa_db:.6g}")
+        self.e_amin.setValue(spec.amin_db)
+        self.e_fs.setText(f"{spec.fs / 1e6:.6g}")
+        if spec.mask:
+            self.e_mask.setText(format_mask(spec.mask))
+        self.e_theta.setValue(spec.tem_theta_deg)
+        self.chk_edges.setChecked(spec.edge_correct)
+        self.chk_coils.setChecked(spec.end_coils)
+        self.e_ql.setText("" if spec.q_l is None else f"{spec.q_l:g}")
+        self.e_qc.setText("" if spec.q_c is None else f"{spec.q_c:g}")
+        self.c_std.setCurrentText(spec.std_series)
+        self.chk_retune.setChecked(spec.std_retune)
+        self.e_res.setText("" if spec.resonator is None else f"{spec.resonator / self.e_res.unit_mult:.6g}")
+        view = view or {}
+        est = view.get("order_estimate")
+        if est and len(est) == 2:
+            self.e_est_a.setText(est[0])
+            self.e_est_f.setText(est[1])
+        pr = view.get("plot_range")
+        if pr:
+            self.chk_auto.setChecked(bool(pr.get("auto", True)))
+            self.e_f1.setText(str(pr.get("start", "0")))
+            self.e_f2.setText(str(pr.get("stop", "300")))
+            self.s_pts.setValue(int(pr.get("points", 1001)))
+        self.markers = [float(m) for m in view.get("markers", [])][:MAX_MARKERS]
+        if "monte_carlo" in view:
+            self.mc_tab.apply_settings(view["monte_carlo"])
+        self._sync_visibility()
+        self.schedule()
+
+    def _set_path(self, path):
+        """Remember the design file and show its name in the title bar."""
+        self.path = path
+        name = Path(path).name if path else None
+        self.setWindowTitle(f"{name} — VektorFIL" if name else "VektorFIL — L-C filter synthesis")
+
+    def open_design(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Open design", "", "VektorFIL design (*.vfil)")
+        if path:
+            self.load_design(path)
+
+    def load_design(self, path, remember=True):
+        """Read a design file into the window."""
+        try:
+            spec, view = project.load(path)
+        except Exception as e:
+            QMessageBox.warning(self, "Open design", f"Cannot read {path}:\n{e}")
+            return
+        self.apply_spec(spec, view)
+        if remember:
+            self._set_path(path)
+
+    def save_design(self):
+        if getattr(self, "path", None):
+            self._write_design(self.path)
+        else:
+            self.save_design_as()
+
+    def save_design_as(self):
+        """Ask for a file name and save the design there."""
+        sp = self.result.spec if self.result else None
+        name = (f"{sp.shape.split(',')[0]}_{sp.ftype}_{sp.order}".lower() if sp else "design") + project.SUFFIX
+        path, _ = QFileDialog.getSaveFileName(self, "Save design", name, "VektorFIL design (*.vfil)")
+        if path:
+            self._write_design(path)
+            self._set_path(path)
+
+    def _write_design(self, path):
+        try:
+            project.save(path, self.spec(), self.view_state())
+        except Exception as e:
+            QMessageBox.warning(self, "Save design", str(e))
+            return
+        self.statusBar().showMessage(f"Saved {path}")
+
+    def closeEvent(self, ev):
+        """Remember the current design for the next start."""
+        if not self.remember_last:
+            super().closeEvent(ev)
+            return
+        try:
+            project.save(app_paths.data_dir() / "last.vfil", self.spec(), self.view_state())
+        except Exception:
+            pass
+        super().closeEvent(ev)
+
+    # ------------------------------------------------------------------ pictures and reports
+    def _grab_response(self):
+        """The response plot as a picture (switching to its tab briefly if needed)."""
+        cur = self.tabs.currentIndex()
+        self.tabs.setCurrentIndex(0)
+        QApplication.processEvents()
+        pm = self.plot_resp.grab()
+        self.tabs.setCurrentIndex(cur)
+        return pm
+
+    def export_report(self):
+        """File -> Export report: summary, response, schematic and element list as PDF."""
+        if self.result is None:
+            return
+        from vektorfil.gui.report import write_report
+        path, _ = QFileDialog.getSaveFileName(self, "Export report", "filter_report.pdf", "PDF (*.pdf)")
+        if not path:
+            return
+        write_report(path, self.result.ladder.title, self.info.text(),
+                     [self._grab_response(), self.schematic.grab()], self.elements.toPlainText())
+        self.statusBar().showMessage(f"Saved {path}")
+
+    def save_picture(self):
+        """File -> Save picture: the plots and the schematic as a PNG."""
+        path, _ = QFileDialog.getSaveFileName(self, "Save picture", "filter.png", "PNG (*.png)")
+        if path:
+            self.right_split.grab().save(path)
+            self.statusBar().showMessage(f"Saved {path}")
+
+    def open_coil(self):
+        """Tools -> Air-core coil, with the inductors of the current design to choose from."""
+        from vektorfil.gui.coil_dialog import CoilDialog
+        inductors = []
+        if self.result is not None:
+            lad = self.result.ladder
+            inductors = [(ln, b.L) for b, (ln, _) in zip(lad.branches, lad.designators())
+                         if b.L is not None and b.kind != "TEM"]
+        dlg = CoilDialog(self, inductors)
+        dlg.show()
+        self._coil_dlg = dlg
 
     # ------------------------------------------------------------------ actions
     def open_diplexer(self):
@@ -1014,6 +1408,14 @@ def main():
     app.setWindowIcon(app_icon())
     w = FilterWindow()
     _install_crash_guard(weakref.ref(w))
+    w.remember_last = True
+    last = app_paths.data_dir() / "last.vfil"
+    if last.exists():                      # carry on where the last session ended
+        try:
+            spec, view = project.load(last)
+            w.apply_spec(spec, view)
+        except Exception:
+            pass
     w.show()
     return app.exec()
 
