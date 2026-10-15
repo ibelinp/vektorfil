@@ -9,7 +9,8 @@ from __future__ import annotations
 import datetime
 
 from PySide6.QtCore import QMarginsF, QRectF, Qt
-from PySide6.QtGui import QFont, QFontMetricsF, QPageLayout, QPageSize, QPainter, QPdfWriter, QTextDocument
+from PySide6.QtGui import (QFont, QFontDatabase, QFontMetricsF, QPageLayout, QPageSize, QPainter, QPdfWriter,
+                           QTextDocument)
 
 from vektorfil import __version__
 
@@ -39,9 +40,10 @@ def write_report(path, title, summary_html, images, table_text):
             pdf.newPage()
             y = 0.0
 
-    def text(s, size, bold=False, family="Segoe UI"):
+    def text(s, size, bold=False, mono=False):
         nonlocal y
-        f = QFont(family)
+        # the system's own UI or fixed-width font, so the report looks right on every platform
+        f = QFont(QFontDatabase.systemFont(QFontDatabase.FixedFont if mono else QFontDatabase.GeneralFont))
         f.setPointSizeF(size)
         f.setBold(bold)
         p.setFont(f)
@@ -67,5 +69,5 @@ def write_report(path, title, summary_html, images, table_text):
         need(h)
         p.drawPixmap(QRectF(0, y, w, h), pm, QRectF(pm.rect()))
         y += h + 40
-    text(table_text, 8, family="Consolas")
+    text(table_text, 8, mono=True)
     p.end()

@@ -178,6 +178,21 @@ needed (it installs for the current user unless you choose otherwise), and Pytho
 adds VektorFIL and this user guide to the Start menu. A portable zip of the same program is offered as well: unzip
 it anywhere and run <code>VektorFIL.exe</code>.</p>
 <p>Windows may show a SmartScreen warning for a new, unsigned program; choose <b>More info → Run anyway</b>.</p>
+<h3>macOS</h3>
+<p>For Macs with Apple silicon (M1 or newer), download <code>VektorFIL-&lt;version&gt;-macos-arm64.zip</code> from
+the same Releases page, unzip it and drag <b>VektorFIL.app</b> into <b>Applications</b>. The app is not notarized by
+Apple (that needs a paid developer account), so the first start needs one extra step: open it once, then go to
+<b>System Settings → Privacy &amp; Security</b> and click <b>Open Anyway</b> (on older macOS versions: right-click the
+app, choose <b>Open</b>, then <b>Open</b>). If macOS reports the app as damaged, run
+<code>xattr -dr com.apple.quarantine /Applications/VektorFIL.app</code> in Terminal. Intel Macs: run from source
+(below).</p>
+<h3>Linux</h3>
+<p>For 64-bit PCs with Ubuntu 22.04, Debian 12, Fedora 36 or newer, download
+<code>VektorFIL-&lt;version&gt;-linux-x86_64.tar.gz</code>, unpack it anywhere and start the program inside:</p>
+<pre>tar xzf VektorFIL-&lt;version&gt;-linux-x86_64.tar.gz
+VektorFIL/VektorFIL</pre>
+<p>It uses the desktop's usual libraries; if Qt reports a missing "xcb" plugin, install
+<code>libxcb-cursor0</code> (Ubuntu/Debian) or <code>xcb-util-cursor</code> (Fedora).</p>
 <h3>From source (any platform)</h3>
 <p>VektorFIL is written in Python and needs Python 3.10 or newer.</p>
 <pre>python -m venv .venv

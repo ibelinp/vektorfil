@@ -3,7 +3,8 @@
 * The log file goes to the user's application-data folder (always writable, also when
   the program is installed under Program Files):
     Windows: %LOCALAPPDATA%\\VektorFIL\\vektorfil.log
-    Linux/macOS: ~/.local/share/VektorFIL/vektorfil.log
+    macOS:   ~/Library/Application Support/VektorFIL/vektorfil.log
+    Linux:   ~/.local/share/VektorFIL/vektorfil.log  (or $XDG_DATA_HOME)
 * Bundled resources (the user guide, licence texts, icon) live next to the program in a
   compiled build, or in the source tree when run with Python.
 """
@@ -39,6 +40,8 @@ def data_dir() -> Path:
     """Per-user writable folder for logs and settings (created on demand)."""
     if sys.platform == "win32":
         base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
     else:
         base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
     d = base / APP_NAME

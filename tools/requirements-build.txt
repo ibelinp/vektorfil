@@ -1,0 +1,10 @@
+# Exact versions for release builds and the automatic tests on GitHub
+# (the versions the Windows release is built and tested with).
+numpy==2.5.4
+scipy==1.18.1
+mpmath==1.4.1
+PySide6==6.12.0
+pyqtgraph==0.14.0
+pytest
+pyinstaller==6.22.3
+pillow            # lets PyInstaller make the macOS icon

@@ -19,6 +19,7 @@ __pycache__/
 htmlcov/
 build/
 dist/
+dist-release/
 *.egg-info/
 *.spec
 # compiled builds (Nuitka / PyInstaller)

@@ -1,0 +1,88 @@
+# Tests on Windows, macOS and Linux, and the macOS and Linux release builds.
+#
+#   push to main      run the tests, build both, keep the files as workflow artifacts
+#   release published build both and attach them to that release
+#   manual run        same as a push (Actions tab -> Build -> Run workflow)
+#
+# The Windows installer is still built on the author's PC (tools/build_windows.py).
+name: Build
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write          # to attach files to a release
+
+concurrency:
+  group: build-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14, windows-latest]
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: tools/requirements-build.txt
+      - name: Qt system libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libxkbcommon-x11-0 libfontconfig1 \
+            libdbus-1-3 libxcb-cursor0
+      - run: python -m pip install -r tools/requirements-build.txt
+      - run: python -m pytest tests -q
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14          # Apple silicon
+            name: macos-arm64
+          - os: ubuntu-22.04      # oldest supported glibc: runs on Ubuntu 22.04+, Debian 12+ ...
+            name: linux-x86_64
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: tools/requirements-build.txt
+      - name: Qt system libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libxkbcommon-x11-0 libfontconfig1 \
+            libdbus-1-3 libxcb-cursor0
+      - run: python -m pip install -r tools/requirements-build.txt
+      - name: Build and self-test
+        id: build
+        run: python tools/build_unix.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VektorFIL-${{ matrix.name }}
+          path: ${{ steps.build.outputs.file }}
+          if-no-files-found: error
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" "${{ steps.build.outputs.file }}" --clobber

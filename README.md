@@ -13,8 +13,19 @@ serve only as reference results to test against.
 
 ## Download
 
-Windows users: get the installer (or the portable zip) from the
-[Releases](https://github.com/ibelinp/vektorfil/releases) page. No Python needed.
+Get the program from the [Releases](https://github.com/ibelinp/vektorfil/releases) page. No
+Python needed.
+
+* **Windows**: the installer (`-setup.exe`) or the portable zip.
+* **macOS** (Apple silicon): `-macos-arm64.zip`, unzip and move VektorFIL.app to Applications.
+  The app is not notarized: the first time, open it and allow it under System Settings ->
+  Privacy & Security -> Open Anyway.
+* **Linux** (x86-64, Ubuntu 22.04 / Debian 12 / Fedora 36 or newer): `-linux-x86_64.tar.gz`,
+  unpack and run `VektorFIL/VektorFIL`.
+
+The macOS and Linux builds are made and self-tested by GitHub Actions
+(`.github/workflows/build.yml`, `tools/build_unix.py`); every push also runs the tests on
+all three systems.
 
 ## Running from source
 

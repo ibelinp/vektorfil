@@ -7,7 +7,6 @@ C_S21 = "#2f7ed8"         # transmission
 C_S11 = "#e4572e"         # reflection
 C_IDEAL = (140, 140, 140)  # ideal (unrounded) response, grid-like grey
 C_EXTRA = "#f1a33c"       # a third curve (impulse response, mask)
-C_MARK = "#f5d33b"        # markers
 
 
 def new_plot(bg, fg, left="dB", bottom="Frequency", bottom_units="Hz", legend=True):

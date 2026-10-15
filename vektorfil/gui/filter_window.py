@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, QUrl, Signal
-from PySide6.QtGui import QAction, QDesktopServices, QFont, QGuiApplication, QIcon
+from PySide6.QtGui import QAction, QDesktopServices, QFont, QFontDatabase, QGuiApplication, QIcon
 from PySide6.QtWidgets import (QAbstractSpinBox, QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog,
                                QDialogButtonBox, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame,
                                QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMainWindow,
@@ -30,7 +30,7 @@ from vektorfil.filters import (SERIES_NAMES, SHUNT_FIRST, TYPES, FilterSpec, aut
                               design, estimate_orders, project, resonator_unit, subtypes)
 from vektorfil.filters.design import SINGLE, format_mask, parse_mask
 from vektorfil.gui.montecarlo_tab import MonteCarloTab
-from vektorfil.gui.plotstyle import C_EXTRA, C_IDEAL, C_MARK, C_S11, C_S21, faded, new_plot
+from vektorfil.gui.plotstyle import C_EXTRA, C_IDEAL, C_S11, C_S21, faded, new_plot
 from vektorfil.gui.schematic import SchematicView, eng
 from vektorfil.gui.smith import SmithChart
 
@@ -43,6 +43,13 @@ GITHUB_URL = "https://github.com/ibelinp/vektorfil"
 
 SUFFIX = {"T": 1e12, "G": 1e9, "M": 1e6, "k": 1e3, "K": 1e3, "m": 1e-3, "u": 1e-6, "µ": 1e-6,
           "n": 1e-9, "p": 1e-12, "f": 1e-15}
+
+
+def mono_font(size: float) -> QFont:
+    """The system's fixed-width font (Consolas, Menlo, DejaVu Sans Mono ...) at size pt."""
+    f = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+    f.setPointSizeF(size)
+    return f
 
 
 def parse_value(text: str, unit_mult: float = 1.0):
@@ -535,7 +542,7 @@ class FilterWindow(QMainWindow):
         self.plot_gd.scene().sigMouseMoved.connect(lambda pos: self._mouse(self.cur_gd, pos))
 
         self.elements = QPlainTextEdit(readOnly=True)
-        self.elements.setFont(QFont("Consolas", 10))
+        self.elements.setFont(mono_font(10))
 
         self.smith = SmithChart(fg, bg)
         self.plot_td = new_plot(bg, fg, left="Step / impulse", bottom="Time", bottom_units="s")
@@ -667,7 +674,7 @@ class FilterWindow(QMainWindow):
         dlg.resize(760, 600)
         lay = QVBoxLayout(dlg)
         txt = QPlainTextEdit(readOnly=True)
-        txt.setFont(QFont("Consolas", 9))
+        txt.setFont(mono_font(9))
         txt.setPlainText("\n\n".join(parts) or "Licence files not found.")
         lay.addWidget(txt)
         bb = QDialogButtonBox(QDialogButtonBox.Close)
