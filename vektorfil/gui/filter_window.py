@@ -15,7 +15,7 @@ from pathlib import Path
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, QUrl, Signal
+from PySide6.QtCore import QObject, QRunnable, QSize, Qt, QThreadPool, QTimer, QUrl, Signal
 from PySide6.QtGui import QAction, QDesktopServices, QFont, QFontDatabase, QGuiApplication, QIcon
 from PySide6.QtWidgets import (QAbstractSpinBox, QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog,
                                QDialogButtonBox, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame,
@@ -62,6 +62,17 @@ def parse_value(text: str, unit_mult: float = 1.0):
         raise ValueError(f"cannot read '{text}'")
     v = float(m.group(1))
     return v * SUFFIX[m.group(2)] if m.group(2) else v * unit_mult
+
+
+def form_layout(parent=None):
+    """A QFormLayout that looks the same on every platform: labels flush left and
+    fields stretched to the column width (macOS otherwise right-aligns the labels and
+    keeps each field at its own size hint)."""
+    form = QFormLayout(parent) if parent is not None else QFormLayout()
+    form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+    form.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
+    form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+    return form
 
 
 class EngSpinBox(QAbstractSpinBox):
@@ -128,6 +139,16 @@ class EngSpinBox(QAbstractSpinBox):
             lo, hi = self.limits
             v = min(max(v, lo), hi)
         self.setText(f"{v / self.unit_mult:.5g}")
+
+    # QAbstractSpinBox sizes itself from its (absent) min/max text, which leaves room
+    # for the arrows only; ask for space for a typical value such as "1234.5678"
+    def sizeHint(self):
+        hint = super().sizeHint()
+        return QSize(hint.width() + self.fontMetrics().horizontalAdvance("1234.5678"), hint.height())
+
+    def minimumSizeHint(self):
+        hint = super().minimumSizeHint()
+        return QSize(hint.width() + self.fontMetrics().horizontalAdvance("123.45"), hint.height())
 
 
 # --------------------------------------------------------------------------- plot cursor
@@ -211,7 +232,7 @@ class PlotRangeDialog(QDialog):
     def __init__(self, parent):
         super().__init__(parent)
         self.setWindowTitle("Plot range")
-        lay = QFormLayout(self)
+        lay = form_layout(self)
         self.chk_auto = QCheckBox("Automatic (follows the design)")
         self.chk_auto.setChecked(True)
         self.e_f1 = QLineEdit("0")
@@ -262,7 +283,7 @@ class FilterWindow(QMainWindow):
         split.addWidget(left)
         split.addWidget(right)
         split.setStretchFactor(1, 1)
-        split.setSizes([360, 960])
+        split.setSizes([left.minimumWidth(), 960])
         self.setCentralWidget(split)
         self._build_menu()
         self.statusBar().showMessage("Ready")
@@ -311,7 +332,7 @@ class FilterWindow(QMainWindow):
 
         # 2  Approximation
         col.addWidget(self._heading(2, "Approximation"))
-        f2 = QFormLayout()
+        f2 = form_layout()
         self.c_approx = QComboBox()
         self.c_approx.addItems(APPROXIMATIONS)
         self.c_approx.setCurrentText("Chebyshev")
@@ -337,7 +358,7 @@ class FilterWindow(QMainWindow):
 
         # 4  Specification
         col.addWidget(self._heading(4, "Specification"))
-        form = QFormLayout()
+        form = form_layout()
         self.e_rs = QLineEdit("50")
         self.e_fc = EngSpinBox("100", 1e6, ratio=1.01)       # 1 % per click
         self.l_fc = QLabel("Cutoff frequency (MHz)")
@@ -426,11 +447,9 @@ class FilterWindow(QMainWindow):
                                   "point where the end capacitor to ground vanishes; below that point "
                                   "nothing changes.")
         form.addRow(self.chk_coils)
-        col.addLayout(form)
 
-        # 5  Components
-        col.addWidget(self._heading(5, "Components"))
-        f5 = QFormLayout()
+        # 5  Components: rows in the same form, so its fields line up with section 4
+        form.addRow(self._heading(5, "Components"))
         self.c_std = QComboBox()
         self.c_std.addItems(SERIES_NAMES)
         self.chk_retune = QCheckBox("Re-tune others while snapping")
@@ -439,11 +458,11 @@ class FilterWindow(QMainWindow):
         self.e_qc = QLineEdit("")
         self.e_ql.setPlaceholderText("lossless")
         self.e_qc.setPlaceholderText("lossless")
-        f5.addRow("Values", self.c_std)
-        f5.addRow(self.chk_retune)
-        f5.addRow("Inductor Q", self.e_ql)
-        f5.addRow("Capacitor Q", self.e_qc)
-        col.addLayout(f5)
+        form.addRow("Values", self.c_std)
+        form.addRow(self.chk_retune)
+        form.addRow("Inductor Q", self.e_ql)
+        form.addRow("Capacitor Q", self.e_qc)
+        col.addLayout(form)
 
         # result summary
         line = QFrame()
@@ -491,7 +510,11 @@ class FilterWindow(QMainWindow):
         scroll.setWidget(panel)
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setMinimumWidth(360)
+        # wide enough for the content plus the vertical scroll bar: with no horizontal
+        # scrolling, a fixed width clips the fields where the style is wider (macOS)
+        need = (panel.minimumSizeHint().width() + scroll.verticalScrollBar().sizeHint().width()
+                + 2 * scroll.frameWidth())
+        scroll.setMinimumWidth(max(360, need))
         return scroll
 
     # ------------------------------------------------------------------ right panel

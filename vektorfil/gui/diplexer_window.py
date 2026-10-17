@@ -18,12 +18,12 @@ import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog,
-                               QFormLayout, QGroupBox, QLabel, QLineEdit, QMainWindow,
+                               QGroupBox, QLabel, QLineEdit, QMainWindow,
                                QPushButton, QScrollArea, QSpinBox, QSplitter, QTabWidget,
                                QVBoxLayout, QWidget)
 
 from vektorfil.filters.diplexer import CHANNEL_SHAPES, DiplexSpec, design_diplexer, touchstone_s3p
-from vektorfil.gui.filter_window import EngSpinBox, parse_value
+from vektorfil.gui.filter_window import EngSpinBox, form_layout, parse_value
 from vektorfil.gui.schematic import SchematicView, eng
 
 
@@ -54,7 +54,7 @@ class _Channel(QGroupBox):
 
     def __init__(self, title, on_change):
         super().__init__(title)
-        form = QFormLayout(self)
+        form = form_layout(self)
         self.shape = QComboBox()
         self.shape.addItems(CHANNEL_SHAPES)
         self.order = QSpinBox()
@@ -126,7 +126,7 @@ class DiplexerWindow(QMainWindow):
         """Inputs: impedance, crossover, and one box per channel."""
         w = QWidget()
         lay = QVBoxLayout(w)
-        top = QFormLayout()
+        top = form_layout()
         self.e_r0 = QLineEdit("50")
         self.e_fx = EngSpinBox("100", 1e6, ratio=1.01)
         self.chk_same = QCheckBox("Common crossover (both channels 3 dB down there)")

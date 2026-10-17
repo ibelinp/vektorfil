@@ -7,10 +7,11 @@ calculation is vektorfil.analysis.coil (Wheeler's 1982 single-layer formula).
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout, QLabel,
+from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QLabel,
                                QLineEdit)
 
 from vektorfil.analysis.coil import awg_mm, design_coil
+from vektorfil.gui.filter_window import form_layout
 
 AWG = range(10, 33)
 
@@ -21,7 +22,7 @@ class CoilDialog(QDialog):
         """inductors: (designator, henry) pairs of the current design."""
         super().__init__(parent)
         self.setWindowTitle("Air-core coil")
-        lay = QFormLayout(self)
+        lay = form_layout(self)
         self.c_pick = QComboBox()
         self.c_pick.addItem("Typed value", None)
         for name, value in inductors:
